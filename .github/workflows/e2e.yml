@@ -1,11 +1,11 @@
 name: e2e
 
 # The checks that run the real Claude Code with its Bash sandbox on: what the binary does with a write outside the project and a
-# connection to a host that is not allowed, which calls leave the sandbox because of sandbox.excludedCommands (the table of
-# commands that `why` is held to), what it does with the sandbox on a machine that lacks bubblewrap, and that the plugin
-# validates and its skill hands the model the report. They cost nothing: Claude Code talks to a fake server on 127.0.0.1.
-# Optional by design: if the binary cannot be installed, the checks skip. Weekly, so a Claude Code release that changes how the
-# sandbox decides shows up here. The sandbox exists on Linux and macOS only, so there is no Windows job.
+# connection to a host that is not allowed, which calls leave the sandbox because of sandbox.excludedCommands (the table of calls
+# that `why` is held to), what it does on a machine that lacks bubblewrap, the merged-usr layout, and that the plugin validates
+# and its skill hands the model the report. They cost nothing: Claude Code talks to a fake server on 127.0.0.1. Optional by
+# design: if the binary cannot be installed, the checks skip. Weekly, so a Claude Code release that changes how the sandbox
+# decides shows up here. The sandbox exists on Linux, WSL2 and macOS only, so there is no Windows job.
 on:
   push:
     branches: [main]
@@ -31,15 +31,66 @@ jobs:
           node-version: 22
       - name: Install bubblewrap and socat
         run: sudo apt-get update && sudo apt-get install -y bubblewrap socat
+      - name: Let bubblewrap create user namespaces (Ubuntu 24.04 restricts them; this is the profile the Claude Code docs give)
+        run: |
+          sysctl kernel.apparmor_restrict_unprivileged_userns || true
+          if [ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = "1" ]; then
+            sudo tee /etc/apparmor.d/bwrap > /dev/null <<'EOF'
+          abi <abi/4.0>,
+          include <tunables/global>
+
+          profile bwrap /usr/bin/bwrap flags=(unconfined) {
+            userns,
+            include if exists <local/bwrap>
+          }
+          EOF
+            sudo systemctl reload apparmor
+          fi
       - name: Install the Claude Code CLI (the checks skip if this fails)
         run: npm install -g @anthropic-ai/claude-code@${{ inputs.claude_version || 'latest' }}
         continue-on-error: true
       - run: claude --version
         continue-on-error: true
-      - name: The sandbox, the table of commands and the plugin against the real binary
-        run: node --test test/e2e-claude.test.mjs
+      - name: The sandbox, the plugin and the host checks against the real binary
+        run: node --test test/e2e-sandbox.test.mjs test/e2e-plugin.test.mjs
         env:
           E2E_CLAUDE: claude
+      - name: The table of calls against the real binary
+        if: ${{ !cancelled() }}
+        run: node --test test/e2e-table.test.mjs
+        env:
+          E2E_CLAUDE: claude
+      - name: check --live and check on this machine
+        if: ${{ !cancelled() }}
+        run: |
+          node bin/claude-sandbox-doctor.mjs check || true
+          node bin/claude-sandbox-doctor.mjs check --live || true
+
+  linux-without:
+    name: ubuntu without bubblewrap and socat
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Make sure bubblewrap and socat are not installed
+        run: |
+          sudo apt-get remove -y bubblewrap socat || true
+          which bwrap socat || echo "neither is installed"
+      - name: Install the Claude Code CLI (the checks skip if this fails)
+        run: npm install -g @anthropic-ai/claude-code@${{ inputs.claude_version || 'latest' }}
+        continue-on-error: true
+      - run: claude --version
+        continue-on-error: true
+      - name: What the binary does without them, and what check says
+        run: node --test test/e2e-nobwrap.test.mjs
+        env:
+          E2E_CLAUDE: claude
+      - name: check on this machine
+        if: ${{ !cancelled() }}
+        run: node bin/claude-sandbox-doctor.mjs check || true
 
   macos:
     name: macos with Seatbelt
@@ -55,7 +106,17 @@ jobs:
         continue-on-error: true
       - run: claude --version
         continue-on-error: true
-      - name: The sandbox, the table of commands and the plugin against the real binary
-        run: node --test test/e2e-claude.test.mjs
+      - name: The sandbox, the plugin and the host checks against the real binary
+        run: node --test test/e2e-sandbox.test.mjs test/e2e-plugin.test.mjs
         env:
           E2E_CLAUDE: claude
+      - name: The table of calls against the real binary
+        if: ${{ !cancelled() }}
+        run: node --test test/e2e-table.test.mjs
+        env:
+          E2E_CLAUDE: claude
+      - name: check --live and check on this machine
+        if: ${{ !cancelled() }}
+        run: |
+          node bin/claude-sandbox-doctor.mjs check || true
+          node bin/claude-sandbox-doctor.mjs check --live || true
