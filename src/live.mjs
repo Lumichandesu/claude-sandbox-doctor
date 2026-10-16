@@ -180,7 +180,7 @@ export async function runLive({ claude, sys, timeout = 120000, extraSettings = {
   const args = ["-p", "PROBE-MAIN check the sandbox", "--output-format", "stream-json", "--verbose", "--permission-mode", "default", "--max-turns", String(probes.length + 3)];
   const viaShell = sys.platform === "win32" && !/\.exe$/i.test(claude);
   const version = (() => { const r = spawnSync(claude, ["--version"], { encoding: "utf8", env, windowsHide: true, shell: viaShell, stdio: ["ignore", "pipe", "pipe"], timeout: 60000 }); return String(r.stdout || "").trim(); })();
-  const result = { version, probes: [], stderr: "", exit: null, warnings: [], ok: false, root: null };
+  const result = { version, probes: [], stderr: "", exit: null, warnings: [], ok: false, startError: null };
   try {
     const run = await new Promise((resolve) => {
       const child = spawn(claude, args, { cwd: work, env, windowsHide: true, shell: viaShell, stdio: ["ignore", "pipe", "pipe"], detached: sys.platform !== "win32" });

@@ -31,7 +31,9 @@ function probeBinary() {
   const home = tmpDir("csd-e2e-probe-");
   return new Promise((resolve) => {
     // like every other start of the binary: spawn (asynchronous), standard input ignored, a config folder of its own
-    const child = spawn(CLAUDE, ["--version"], { windowsHide: true, shell: viaShell(), stdio: ["ignore", "pipe", "pipe"], env: baseEnv({ CLAUDE_CONFIG_DIR: path.join(home, ".claude"), HOME: home, USERPROFILE: home }) });
+    // a file that is no program (a wrapper left by an install that failed) makes spawn throw at once, with ENOEXEC
+    let child;
+    try { child = spawn(CLAUDE, ["--version"], { windowsHide: true, shell: viaShell(), stdio: ["ignore", "pipe", "pipe"], env: baseEnv({ CLAUDE_CONFIG_DIR: path.join(home, ".claude"), HOME: home, USERPROFILE: home }) }); } catch (e) { resolve({ ok: false, version: "", number: "", reason: `E2E_CLAUDE (${CLAUDE}) did not run: ${e.message}` }); return; }
     let out = "";
     let err = "";
     const timer = setTimeout(() => child.kill(), 60000);

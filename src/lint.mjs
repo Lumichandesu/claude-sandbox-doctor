@@ -70,7 +70,7 @@ export const RULES = {
   "inert-here": { severity: "warning", basis: "docs", what: "a key that does something only on another system (enableWeakerNetworkIsolation off macOS, bwrapPath off Linux)" },
   "weaker-nested": { severity: "warning", basis: "binary", what: "enableWeakerNestedSandbox, which mounts the host's /proc and says what that gives up" },
   "mask-in-repository": { severity: "warning", basis: "docs", what: "a credentials mask entry in a project or local file" },
-  "dead-entry": { severity: "warning", basis: "binary", what: "an excludedCommands entry that can never take a call out of the sandbox (about 30 reasons)" },
+  "dead-entry": { severity: "warning", basis: "binary", what: "an excludedCommands entry that can never take a call out of the sandbox" },
   "bare-entry": { severity: "warning", basis: "binary", what: "an excludedCommands entry with no wildcard, which matches the bare command only" },
   "all-entry": { severity: "warning", basis: "binary", what: "an excludedCommands entry that matches every command" },
   "broad-entry": { severity: "note", basis: "docs", what: "an excludedCommands entry for an interpreter, which lets a script leave the sandbox" },

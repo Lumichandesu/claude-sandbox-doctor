@@ -41,6 +41,12 @@ export function readMarks(file) {
   return out;
 }
 
+/**
+ * The marks that belong to the call: Claude Code itself runs git now and then (2.1.289 did it while a call was running), and the
+ * stand-in for git records that as a call of its own, outside the sandbox. A mark of git counts only for a call that names git.
+ */
+export const ownMarks = (command, marks) => (marks || []).filter((m) => !(m.name === "git" && !/\bgit\b/.test(command)));
+
 /** The place the row ran, from its marks: "sandboxed", "unsandboxed", "mixed" or null (nothing ran). */
 export function placeOf(marks) {
   if (!marks || !marks.length) return null;
@@ -72,7 +78,8 @@ export async function runChunk(group, rows, { timeout = 240000, args = [], appro
     const result = resultEvent(events);
     return rows.map((row, n) => {
       const call = results.find((c) => c.id === `toolu_call_${n}`) || null;
-      return { row, place: placeOf(marks[n]), marks: marks[n] || [], text: call ? call.text : null, isError: call ? call.isError : null, decision: call ? call.decision : null, called: Boolean(call), session: { code: run.code, err: run.err.slice(0, 400), subtype: result ? result.subtype : null, denials: result && result.permission_denials ? result.permission_denials.length : null } };
+      const own = ownMarks(row.command, marks[n]);
+      return { row, place: placeOf(own), marks: own, text: call ? call.text : null, isError: call ? call.isError : null, decision: call ? call.decision : null, called: Boolean(call), session: { code: run.code, err: run.err.slice(0, 400), subtype: result ? result.subtype : null, denials: result && result.permission_denials ? result.permission_denials.length : null } };
     });
   } finally {
     await api.close();
@@ -104,7 +111,7 @@ export async function runSession({ label = "session", user, project, local, comm
     const events = streamEvents(run);
     const results = toolCalls(events);
     const marks = readMarks(sb.marks);
-    return { sb, run, events, calls: calls.map((_, n) => results.find((c) => c.id === `toolu_call_${n}`) || null), places: calls.map((_, n) => placeOf(marks[n])), marks, result: resultEvent(events) };
+    return { sb, run, events, calls: calls.map((_, n) => results.find((c) => c.id === `toolu_call_${n}`) || null), places: calls.map((c, n) => placeOf(ownMarks(c.command, marks[n]))), marks, result: resultEvent(events) };
   } finally {
     await api.close();
   }

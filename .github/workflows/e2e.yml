@@ -82,10 +82,11 @@ jobs:
         run: |
           node bin/claude-sandbox-doctor.mjs check || true
           node bin/claude-sandbox-doctor.mjs check --live || true
-      - name: The examples of the README (examples/shop copied to ~/shop, no user settings)
+      - name: The examples of the README (examples/shop and examples/locked copied to ~, no user settings)
         if: ${{ !cancelled() }}
         run: |
           cp -r examples/shop "$HOME/shop"
+          cp -r examples/locked "$HOME/locked"
           run() { echo; echo "=== claude-sandbox-doctor $*"; node bin/claude-sandbox-doctor.mjs "$@"; echo "exit=$?"; }
           run show --project "$HOME/shop" || true
           run lint --project "$HOME/shop" || true
@@ -95,7 +96,9 @@ jobs:
           run why "docker ps" --project "$HOME/shop" || true
           run why "cd infra && terraform plan" --project "$HOME/shop" || true
           run why "npm run build > build.log" --project "$HOME/shop" || true
-          run why "git push origin main" --project "$HOME/shop" --retry || true
+          run why "npm test" --project "$HOME/shop" --retry || true
+          run why "npm test" --project "$HOME/locked" --retry || true
+          run why "gh pr list" --project "$HOME/locked" || true
           run why "docker ps" --project "$HOME/shop" --json || true
 
   linux-without:
