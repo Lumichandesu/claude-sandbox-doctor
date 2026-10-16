@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { run, world } from "./helpers.mjs";
-import { domainProblem } from "../src/lint.mjs";
+import { RULES, domainProblem } from "../src/lint.mjs";
 import { MAC, WINDOWS, ubuntu } from "./fakesys.mjs";
 
 const HOSTS = { linux: () => ubuntu({ profile: true }), linuxNoBwrap: () => ubuntu({ bwrap: false, socat: false }), mac: MAC, windows: WINDOWS };
@@ -17,6 +17,8 @@ async function lint(files, host = "linux") {
   const j = r.json();
   return { code: r.code, findings: j.findings, ids: j.findings.map((f) => `${f.severity} ${f.id}`).sort(), counts: j.counts };
 }
+/** Every finding the table below produced, for the test of the rules at the end. */
+const seen = [];
 const S = (sandbox) => ({ user: { sandbox: { enabled: true, ...sandbox } } });
 
 // settings, machine, and the findings the lint gives (an empty list: none)
@@ -43,6 +45,7 @@ const TABLE = [
   ["a wildcard for subdomains, without the domain itself", S({ network: { allowedDomains: ["*.github.com"] } }), "linux", ["note wildcard-apex"]],
   ["a wildcard and the domain", S({ network: { allowedDomains: ["*.github.com", "github.com"] } }), "linux", []],
   ["a denied domain with a scheme", S({ network: { deniedDomains: ["http://evil.test"] } }), "linux", ["warning domain-scheme"]],
+  ["an empty domain, a domain with a space and one with characters a host name does not have", S({ network: { allowedDomains: ["", " github.com", "a_b!.com"] } }), "linux", ["warning domain-empty", "warning domain-space", "warning domain-chars"]],
   ["failIfUnavailable where bubblewrap is missing", S({ failIfUnavailable: true }), "linuxNoBwrap", ["error fail-if-unavailable"]],
   ["failIfUnavailable on Windows", S({ failIfUnavailable: true }), "windows", ["error fail-if-unavailable"]],
   ["failIfUnavailable where the sandbox starts", S({ failIfUnavailable: true }), "linux", []],
@@ -87,6 +90,7 @@ for (const [name, files, host, want] of TABLE) {
     }
     const r = await run(["lint", "--json"], w, { sys: HOSTS[host]() });
     const j = r.json();
+    seen.push(...j.findings);
     assert.deepEqual(j.findings.map((x) => `${x.severity} ${x.id}`).sort(), [...want].sort(), JSON.stringify(j.findings.map((x) => x.message)));
     assert.equal(r.code, want.some((x) => /^(error|warning)/.test(x)) ? 1 : 0, "exit 1 on an error or a warning");
   });
@@ -107,7 +111,7 @@ test("a finding names the file, the line and the key, and says what to do", asyn
   const text = (await run(["lint"], w, { sys: ubuntu({ profile: true }) })).out;
   assert.match(text, /~\/\.claude\/settings\.json {2}user settings/);
   assert.match(text, /warning bare-entry +line 6 +sandbox\.excludedCommands/);
-  assert.match(text, /1 error|0 errors, 1 warning, 0 notes in 1 file/);
+  assert.match(text, /0 errors, 1 warning, 0 notes \(1 settings file read\)/);
 });
 
 test("lint --markdown is the short form for the skill: at most 12 findings, 300 characters a line, and it always exits 0", async () => {
@@ -132,4 +136,23 @@ test("domainProblem: what the proxy cannot match", () => {
   for (const [entry, code] of Object.entries(bad)) assert.equal((domainProblem(entry) || {}).code, code, JSON.stringify(entry));
   for (const ok of ["github.com", "GitHub.com", "*.github.com", "*", "api.example.com:443", "*.example.com:8080", "[::1]", "[::1]:443", "127.0.0.1", "127.0.0.1:8080", "localhost", "my_host.test", "xn--mnchen-3ya.de"]) assert.equal(domainProblem(ok), null, ok);
   assert.equal(domainProblem(7).code, "domain-type");
+});
+
+test("RULES: every finding the table produced is a rule with the severity and the basis that RULES gives, and every rule was produced", () => {
+  const ids = new Set(seen.map((f) => f.id));
+  for (const f of seen) {
+    const rule = RULES[f.id];
+    assert.ok(rule, `${f.id} is in RULES`);
+    assert.equal(f.severity, rule.severity, `${f.id}: severity`);
+    if (f.id !== "key-scope") assert.equal(f.basis, rule.basis, `${f.id}: basis`);
+    assert.ok(["binary", "docs"].includes(f.basis), `${f.id}: basis ${f.basis}`);
+  }
+  assert.deepEqual(Object.keys(RULES).filter((id) => !ids.has(id)), [], "a rule that no row of the table triggers");
+  for (const [id, rule] of Object.entries(RULES)) assert.ok(rule.what && rule.what.length > 20, `${id} says what it finds`);
+});
+
+test("key-scope: the basis is binary for a key whose scope was put to the binary, and docs for the rest", async () => {
+  const a = await lint({ project: { sandbox: { enabled: true, bwrapPath: "/opt/bwrap", allowAppleEvents: true } } });
+  const basis = Object.fromEntries(a.findings.filter((f) => f.id === "key-scope").map((f) => [f.keyPath, f.basis]));
+  assert.deepEqual(basis, { "sandbox.bwrapPath": "binary", "sandbox.allowAppleEvents": "docs" });
 });

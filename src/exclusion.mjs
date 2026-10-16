@@ -11,7 +11,6 @@
 // reading of a command for permission rules. This file is the part that is about the sandbox.
 import { parseBash } from "./engine/shell.mjs";
 import { parseContent, matches } from "./engine/pattern.mjs";
-import { wrapperLength } from "./engine/wrappers.mjs";
 import { GIT_PATH_FORMS, INTERPRETERS, LOOKED_THROUGH, MAX_CALL_CHARS, RISKY_FLAGS, SAFE_ENV, STAYS_SANDBOXED } from "./facts.mjs";
 
 /** Every reason a call or a part can stay sandboxed: the id (stable, in --json) and what it says. */
@@ -57,8 +56,6 @@ export const REASONS = {
   "arg-expansion": "an argument of this program has a variable or substitution in it",
   "no-entry": "no entry of excludedCommands matches this part",
 };
-
-const REDIRECT_FD_DUP = /^(?:\d+)?>&\d*-?$|^<&\d*-?$/;
 
 /** A redirection that only copies a file descriptor (2>&1) does not keep a call sandboxed; any other does. */
 const isDescriptorCopy = (r) => (r.op === ">&" || r.op === "<&") && r.target && /^\d+$/.test(r.target.value) && !r.heredoc && (r.fd === null || /^\d+$/.test(String(r.fd)));
@@ -107,7 +104,6 @@ export function neverCovered(word) {
 // ---- the parts -----------------------------------------------------------------------------------------------------------
 
 const wordsOf = (text) => [...String(text).matchAll(/[^ \t]+/g)].map((m) => ({ text: m[0], index: m.index }));
-const stripWords = (text, k) => { const w = wordsOf(text); return k >= w.length ? "" : text.slice(w[k].index); };
 
 /** Leading NAME=value words of a text whose NAME is on the harmless list are stepped over. */
 function stepOverAssignments(text) {

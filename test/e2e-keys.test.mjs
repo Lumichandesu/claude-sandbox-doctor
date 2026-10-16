@@ -83,27 +83,30 @@ test("an allowWrite entry does not lift the protection of .mcp.json and .claude/
   assert.ok(j.findings.some((f) => f.id === "protected-path"));
 });
 
-test("a wildcard in an allowWrite entry: on Linux the sandbox mounts concrete paths, so the entry gives nothing", { skip: SKIP, timeout: 300000 }, async (t) => {
+test("a wildcard in an allowWrite entry: on Linux the sandbox mounts concrete paths, so the entry gives nothing (what macOS does is recorded)", { skip: SKIP, timeout: 300000 }, async (t) => {
   // the world is made inside runSession, so the folders are made through its setup hook
   let home;
   const res = await runSession({
     label: "glob",
     project: {},
     programs: [],
-    commands: ["touch $CSD_HOME/exact-dir/ok; echo rc=$?", "touch $CSD_HOME/glob-a/ok; echo rc=$?"],
+    commands: ["touch $CSD_HOME/exact-dir/ok; echo rc=$?", "touch $CSD_HOME/glob-a/ok; echo rc=$?", "touch $CSD_HOME/gfile-1; echo rc=$?"],
     setup: (s) => {
       home = s.home;
       fs.mkdirSync(path.join(home, "exact-dir"), { recursive: true });
       fs.mkdirSync(path.join(home, "glob-a"), { recursive: true });
-      put(s.user, { sandbox: { enabled: true, filesystem: { allowWrite: [path.join(home, "exact-dir"), path.join(home, "glob-*")] } } });
+      put(s.user, { sandbox: { enabled: true, filesystem: { allowWrite: [path.join(home, "exact-dir"), path.join(home, "glob-*"), path.join(home, "gfile-*")] } } });
     },
     user: undefined,
     env: (s) => ({ CSD_HOME: s.home }),
   });
-  const exact = fs.existsSync(path.join(home, "exact-dir", "ok"));
-  const glob = fs.existsSync(path.join(home, "glob-a", "ok"));
-  t.diagnostic(`Claude Code ${claudeInfo().version} on ${process.platform}: an exact allowWrite path wrote: ${exact}; the entry with a wildcard wrote: ${glob} (${JSON.stringify(res.calls[1].text.replace(/\s+/g, " ").slice(0, 120))})`);
-  assert.equal(exact, true, "the exact path is writable");
-  if (LINUX) assert.equal(glob, false, "the wildcard entry is skipped on Linux");
-  if (LINUX) assert.ok((await ids({ user: { sandbox: { enabled: true, filesystem: { allowWrite: [path.join(home, "glob-*")] } } } })).includes("write-glob-linux"));
+  const wrote = { exact: fs.existsSync(path.join(home, "exact-dir", "ok")), inFolder: fs.existsSync(path.join(home, "glob-a", "ok")), file: fs.existsSync(path.join(home, "gfile-1")) };
+  const say = (n) => JSON.stringify(res.calls[n].text.replace(/\s+/g, " ").slice(0, 110));
+  t.diagnostic(`Claude Code ${claudeInfo().version} on ${process.platform}: an exact allowWrite path wrote: ${wrote.exact}; a file inside a folder that a wildcard entry matches: ${wrote.inFolder} (${say(1)}); a new file whose name a wildcard entry matches: ${wrote.file} (${say(2)})`);
+  assert.equal(wrote.exact, true, "the exact path is writable");
+  if (LINUX) {
+    assert.equal(wrote.inFolder, false, "the wildcard entry is skipped on Linux");
+    assert.equal(wrote.file, false, "and so is the one for a new file");
+    assert.ok((await ids({ user: { sandbox: { enabled: true, filesystem: { allowWrite: [path.join(home, "glob-*")] } } } })).includes("write-glob-linux"));
+  }
 });

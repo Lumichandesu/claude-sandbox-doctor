@@ -13,10 +13,14 @@
 export const SCOPE_TEXT = {
   any: "any settings file",
   user: "user settings, managed settings and --settings (not project or local settings)",
-  managed: "managed settings only",
+  managed: "managed settings",
 };
 
-/** The sandbox keys: type, who honors them, where they do anything. `leaf` is the dotted path under `sandbox`. */
+/**
+ * The sandbox keys: type, who honors them, where they do anything. The key is the dotted path under `sandbox`. `verified` marks a
+ * key whose scope was put to the binary (a user file's value did nothing, test/e2e-keys.test.mjs and test/e2e-bwrap.test.mjs, and
+ * the managed one did something, test/e2e-managed.test.mjs).
+ */
 export const SANDBOX_KEYS = {
   "enabled": { type: "boolean", scope: "any" },
   "failIfUnavailable": { type: "boolean", scope: "any" },
@@ -26,9 +30,9 @@ export const SANDBOX_KEYS = {
   "enableWeakerNestedSandbox": { type: "boolean", scope: "any", platforms: ["linux", "wsl"] },
   "enableWeakerNetworkIsolation": { type: "boolean", scope: "any", platforms: ["macos"] },
   "allowAppleEvents": { type: "boolean", scope: "user", platforms: ["macos"] },
-  "bwrapPath": { type: "string", scope: "managed", platforms: ["linux", "wsl"] },
-  "socatPath": { type: "string", scope: "managed", platforms: ["linux", "wsl"] },
-  "enabledPlatforms": { type: "strings", scope: "managed", list: true },
+  "bwrapPath": { type: "string", scope: "managed", platforms: ["linux", "wsl"], verified: true },
+  "socatPath": { type: "string", scope: "managed", platforms: ["linux", "wsl"], verified: true },
+  "enabledPlatforms": { type: "strings", scope: "managed", list: true, verified: true },
   "ignoreViolations": { type: "object" },
   "ripgrep": { type: "object", scope: "user" },
   "filesystem": { type: "object" },
@@ -41,7 +45,7 @@ export const SANDBOX_KEYS = {
   "network": { type: "object" },
   "network.allowedDomains": { type: "strings", scope: "any", list: true },
   "network.deniedDomains": { type: "strings", scope: "any", list: true },
-  "network.allowManagedDomainsOnly": { type: "boolean", scope: "managed" },
+  "network.allowManagedDomainsOnly": { type: "boolean", scope: "managed", verified: true },
   "network.strictAllowlist": { type: "boolean", scope: "user" },
   "network.allowUnixSockets": { type: "strings", scope: "any", list: true, platforms: ["macos"] },
   "network.allowAllUnixSockets": { type: "boolean", scope: "any" },

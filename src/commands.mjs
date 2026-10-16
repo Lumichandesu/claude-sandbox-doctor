@@ -19,11 +19,6 @@ export function settingsFor(o) {
   return loadSettings({ project: o.project, ...base(o) });
 }
 
-/** The platform id the settings are read for: the host's, unless a test names one. */
-function platformIdOf(o) {
-  return detectPlatform(machine(o)).id;
-}
-
 export async function buildCheckModel(o) {
   const sys = machine(o);
   let settings = null;
@@ -32,12 +27,10 @@ export async function buildCheckModel(o) {
   try {
     settings = settingsFor({ ...o, project: o.project });
     merged = mergeSandbox(settings, { platform: detectPlatform(sys).id });
-    const e = merged.effective;
     const v = (k) => (merged.values[k] && merged.values[k].winner ? merged.values[k].winner.value : undefined);
     if (typeof v("bwrapPath") === "string") paths.bwrapPath = v("bwrapPath");
     if (typeof v("socatPath") === "string") paths.socatPath = v("socatPath");
     paths.enableWeakerNestedSandbox = v("enableWeakerNestedSandbox") === true;
-    void e;
   } catch { /* the settings are not needed for the host checks */ }
   const host = checkHost(sys, { settings: paths });
   const model = { ok: host.ok, platform: host.platform, hasSandbox: host.hasSandbox, items: host.items, missing: host.missing, summary: host.summary, live: null };
@@ -76,9 +69,8 @@ export function buildLintModel(o) {
   const sys = machine(o);
   const host = checkHost(sys, { light: true, settings: {} });
   const merged = mergeSandbox(s, { platform: host.platform.id });
-  const paths = {};
   const { findings, counts } = lintSettings(s, { host, merged });
-  return { ok: true, project: s.project, configDir: s.configDir, platform: host.platform, hostMissing: host.missing, findings, counts, files: s.files.map((f) => ({ scope: f.scope, label: f.label, path: f.path, display: f.display, exists: f.exists, ignored: f.ignored, sandboxKeys: f.view && f.view.sandbox ? Object.keys(f.view.sandbox.entries).length : 0 })), paths };
+  return { ok: true, project: s.project, configDir: s.configDir, platform: host.platform, hostMissing: host.missing, findings, counts, files: s.files.map((f) => ({ scope: f.scope, label: f.label, path: f.path, display: f.display, exists: f.exists, ignored: f.ignored, sandboxKeys: f.view && f.view.sandbox ? Object.keys(f.view.sandbox.entries).length : 0 })) };
 }
 
 export { shortPath };

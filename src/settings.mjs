@@ -192,7 +192,3 @@ function resolveDirFor(d, file, { configDir: cfgDir, project, home }) {
   return path.resolve(file.scope === "user" ? cfgDir : project, d);
 }
 
-/** Read a file the way the CLI is asked to: undefined when it is not there. */
-export function readIfThere(file) {
-  try { return fs.readFileSync(file, "utf8"); } catch { return undefined; }
-}

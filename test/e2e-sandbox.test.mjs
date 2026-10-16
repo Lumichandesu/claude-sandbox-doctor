@@ -43,15 +43,21 @@ test("a write outside the project is blocked inside the sandbox, a call taken ou
 
 const curl = (host) => `curl -sS -m 10 -o /dev/null -w "%{http_code}" http://${host}/`;
 
-test("a connection to a host that is not in allowedDomains is refused by the sandbox's proxy and the result names the host; with the host in allowedDomains the proxy lets it through", { skip: SKIP, timeout: 300000 }, async (t) => {
-  const closed = await runSession({ label: "net-closed", user: { sandbox: { enabled: true } }, project: {}, programs: [], commands: [curl("probe-a.invalid")] });
-  const open = await runSession({ label: "net-open", user: { sandbox: { enabled: true, network: { allowedDomains: ["probe-a.invalid"] } } }, project: {}, programs: [], commands: [curl("probe-a.invalid")] });
+test("a connection to a host that is not in allowedDomains is refused by the sandbox's proxy and the result names the host; with the host in allowedDomains the proxy lets it through; in bypassPermissions mode it lets every host through", { skip: SKIP, timeout: 300000 }, async (t) => {
+  const run = (label, mode, network) => runSession({ label, mode, user: { sandbox: { enabled: true, ...(network ? { network } : {}) } }, project: {}, programs: [], commands: [curl("probe-a.invalid")] });
+  const closed = await run("net-closed", "default");
+  const open = await run("net-open", "default", { allowedDomains: ["probe-a.invalid"] });
+  const bypass = await run("net-bypass", "bypassPermissions");
+  const bypassManaged = await run("net-bypass-denied", "bypassPermissions", { deniedDomains: ["probe-a.invalid"] });
   const refused = closed.calls[0].text;
   assert.ok(refused.includes("403"), refused);
   assert.ok(refused.includes("network-outbound probe-a.invalid:80"), refused);
   assert.ok(!open.calls[0].text.includes("403"), open.calls[0].text);
   assert.ok(!open.calls[0].text.includes("network-outbound"), open.calls[0].text);
-  t.diagnostic(`Claude Code ${claudeInfo().version}: refused -> ${JSON.stringify(refused.replace(/\s+/g, " ").slice(0, 160))}; allowed -> ${JSON.stringify(open.calls[0].text.replace(/\s+/g, " ").slice(0, 160))}`);
+  assert.ok(!bypass.calls[0].text.includes("403"), `bypassPermissions: ${bypass.calls[0].text}`);
+  assert.ok(bypassManaged.calls[0].text.includes("403"), `a deniedDomains entry holds in bypassPermissions: ${bypassManaged.calls[0].text}`);
+  const one = (r) => JSON.stringify(r.calls[0].text.replace(/\s+/g, " ").slice(0, 120));
+  t.diagnostic(`Claude Code ${claudeInfo().version}: default mode, host not listed -> ${one(closed)}; listed -> ${one(open)}; bypassPermissions, host not listed -> ${one(bypass)}; denied -> ${one(bypassManaged)}`);
 });
 
 test("check agrees with the binary: the sandbox can start here, and check --live finds the command inside the sandbox, the write blocked and the connection refused", { skip: SKIP, timeout: 300000 }, async (t) => {

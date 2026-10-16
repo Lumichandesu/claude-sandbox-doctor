@@ -226,7 +226,7 @@ export function renderLint(m, { color = false } = {}) {
     }
     out.push("");
   }
-  out.push(`${plural(m.counts.error, "error")}, ${plural(m.counts.warning, "warning")}, ${plural(m.counts.note, "note")} in ${plural(m.files.filter((f) => f.exists).length, "file")}`);
+  out.push(`${plural(m.counts.error, "error")}, ${plural(m.counts.warning, "warning")}, ${plural(m.counts.note, "note")} (${plural(m.files.filter((f) => f.exists).length, "settings file")} read)`);
   return `${out.join("\n")}\n`;
 }
 

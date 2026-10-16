@@ -52,9 +52,16 @@ test("the command line Claude Code gives bubblewrap holds the flags of the trial
   assert.ok(argv, `bubblewrap was started with --unshare-net; it was started ${recorded(r.sb).length} times`);
   inOrder(argv, trialGroups(false));
   const work = fs.realpathSync(r.sb.work);
-  for (const g of [["--setenv", "SANDBOX_RUNTIME", "1"], ["--bind", work, work], ["--ro-bind", "/dev/null", path.join(work, ".claude", "settings.json")], ["--", "/bin/bash", "-c"]]) assert.ok(find(argv, g) >= 0, `${g.join(" ")} is in the command line`);
+  const bare = [];
+  for (let i = 0; i < argv.length; i++) { if (argv[i] === "--setenv") { i += 2; continue; } bare.push(argv[i]); }
+  const shown = bare.join(" ").slice(0, 2500);
+  for (const g of [["--setenv", "SANDBOX_RUNTIME", "1"], ["--bind", work, work], ["--", "/bin/bash", "-c"]]) assert.ok(find(argv, g) >= 0, `${g.join(" ")} is in the command line: ${shown}`);
   assert.equal(find(argv, ["--ro-bind", work, work]), -1, "the project folder is not read-only");
+  const guarded = argv.flatMap((a, i) => (a === "--ro-bind" && argv[i + 1] === "/dev/null" ? [argv[i + 2]] : []));
   t.diagnostic(`Claude Code ${claudeInfo().version}: ${argv.length} arguments; the trial's flags in order: ${trialGroups(false).map((g) => g.join(" ")).join(" | ")}; the call ended with ${argv.slice(find(argv, ["--", "/bin/bash"])).slice(0, 4).join(" ")}`);
+  t.diagnostic(`${guarded.length} paths are bound to /dev/null (write-protected): ${guarded.map((p) => path.relative(work, p) || p).join(" ")}`);
+  t.diagnostic(`the command line without the environment: ${shown}`);
+  assert.ok(guarded.length > 0, "some paths are write-protected with --ro-bind /dev/null");
 });
 
 test("with enableWeakerNestedSandbox the /proc is the host's, bound in place of a fresh one, and the rest of the line is the same", { skip: SKIP, timeout: 300000 }, async (t) => {

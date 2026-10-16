@@ -25,8 +25,6 @@ export function honoredFrom(key, scope) {
   return true;
 }
 
-const firstValue = (entries) => (entries.length ? entries[0].value : undefined);
-
 /**
  * Merge the sandbox keys of the settings files.
  *   settings   the object src/settings.mjs gives

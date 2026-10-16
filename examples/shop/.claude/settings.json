@@ -1,0 +1,20 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "excludedCommands": [
+      "docker",
+      "docker compose *",
+      "git push *",
+      "sudo systemctl *",
+      "cd infra && terraform *",
+      "npm run build > build.log"
+    ],
+    "network": {
+      "allowedDomains": ["github.com", "https://registry.npmjs.org", "api.example.com/v1", "*.npmjs.org"]
+    },
+    "filesystem": {
+      "allowWrite": ["~/.cache/*", ".mcp.json"]
+    },
+    "bwrapPath": "/opt/bwrap/bin/bwrap"
+  }
+}

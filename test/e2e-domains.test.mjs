@@ -1,7 +1,8 @@
 // network.allowedDomains and deniedDomains put to the real Claude Code: which spellings of an entry let a request through the
 // sandbox's proxy and which never match (the table of test/domain-table.mjs). Runs where the sandbox exists (Linux with
 // bubblewrap and socat, macOS), at zero tokens: the hosts are under .invalid, which never resolves, so a request that the proxy
-// lets through ends in a failed lookup, and one it refuses ends in its 403 and a line "deny network-outbound host:port".
+// lets through ends in a failed lookup, and one it refuses ends in its 403 and a line "deny network-outbound host:port". The
+// permission mode is default: in bypassPermissions Claude Code lets every host through (test/e2e-sandbox.test.mjs shows that).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { claudeInfo, fakeApi, put, runClaude, sandbox, skip, streamEvents, toolCalls, IS_WIN } from "./claude-sandbox.mjs";
@@ -22,7 +23,7 @@ async function runGroup(g) {
     put(sb.user, { sandbox: { enabled: true, network: { allowedDomains: g.allow, ...(g.deny ? { deniedDomains: g.deny } : {}) } } });
     const api = await fakeApi({ calls: rows.map((r) => ({ command: curl(r.host, r.port) })) });
     try {
-      const run = await runClaude(sb, api, ["-p", "PROBE-MAIN go", "--output-format", "stream-json", "--verbose", "--permission-mode", "bypassPermissions", "--max-turns", String(rows.length + 3)]);
+      const run = await runClaude(sb, api, ["-p", "PROBE-MAIN go", "--output-format", "stream-json", "--verbose", "--permission-mode", "default", "--max-turns", String(rows.length + 3)]);
       const calls = toolCalls(streamEvents(run));
       if (!calls.length && attempt < 2) continue;
       return rows.map((row, n) => {
@@ -50,7 +51,7 @@ test("the table of domain entries put to the binary: which requests the proxy le
   t.diagnostic(`Claude Code ${claudeInfo().version}: ${requests.length - differ.length - none.length} of ${requests.length} requests were let through or refused as the table says; ${none.length} did not run`);
   for (const d of differ) t.diagnostic(`  differs: ${d}`);
   for (const r of none) t.diagnostic(`  did not run: ${r.id} ${r.request}`);
-  const sample = out.find((o) => !o.refused && o.text) ;
+  const sample = out.find((o) => !o.refused && o.text);
   if (sample) t.diagnostic(`a request that was let through: ${JSON.stringify(sample.text.slice(0, 200))}`);
   const denied = out.find((o) => o.refused && o.text);
   if (denied) t.diagnostic(`a request that was refused: ${JSON.stringify(denied.text.slice(0, 260))}`);
