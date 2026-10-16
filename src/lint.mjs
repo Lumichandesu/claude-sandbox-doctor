@@ -67,6 +67,7 @@ export const RULES = {
   "domain-wildcard": { severity: "warning", basis: "binary", what: "a domain entry with a * that is not the whole first label" },
   "domain-chars": { severity: "warning", basis: "binary", what: "a domain entry with characters a host name does not have" },
   "wildcard-apex": { severity: "note", basis: "binary", what: "*.example.com without example.com, which the wildcard does not match" },
+  "domains-bypass": { severity: "warning", basis: "binary", what: "network.allowedDomains while permissions.defaultMode is bypassPermissions, a mode in which Claude Code lets every host through unless strictAllowlist or allowManagedDomainsOnly is on" },
   "inert-here": { severity: "warning", basis: "docs", what: "a key that does something only on another system (enableWeakerNetworkIsolation off macOS, bwrapPath off Linux)" },
   "weaker-nested": { severity: "warning", basis: "binary", what: "enableWeakerNestedSandbox, which mounts the host's /proc and says what that gives up" },
   "mask-in-repository": { severity: "warning", basis: "docs", what: "a credentials mask entry in a project or local file" },
@@ -277,6 +278,19 @@ export function lintSettings(settings, { host, merged } = {}) {
     const ep = m.values.enabledPlatforms;
     const s = ep && ep.winner ? ep.winner.source : null;
     if (s) add({ id: "platform-excluded", severity: "warning", scope: s.scope, file: s.path, display: s.display, line: s.line, keyPath: "sandbox.enabledPlatforms", effect: "key", message: `enabledPlatforms lists ${JSON.stringify(ep.winner.value)} without ${eff.claudePlatform}, so on this system the whole sandbox block is inert: no sandbox, no auto-allow, no warning, no failIfUnavailable exit.`, fix: `Add "${eff.claudePlatform}" to enabledPlatforms.` });
+  }
+
+  // allowedDomains in the bypassPermissions mode: Claude Code lets every host through, unless a strict list is on
+  if (eff.enabled) {
+    const modes = settings.files.filter((f) => f.exists && !f.ignored && (f.scope === "user" || f.scope === "managed") && f.view && f.view.permissions && f.view.permissions.defaultMode && f.view.permissions.defaultMode.value);
+    modes.sort((a, b) => b.rank - a.rank);
+    const top = modes[0];
+    const strictOn = (k) => { const v = val(k); return Boolean(v && v.winner.value === true); };
+    const domains = m.lists["network.allowedDomains"] || [];
+    if (top && top.view.permissions.defaultMode.value === "bypassPermissions" && domains.length && !strictOn("network.strictAllowlist") && !strictOn("network.allowManagedDomainsOnly")) {
+      const first = domains[0].sources[0];
+      add({ id: "domains-bypass", severity: "warning", scope: top.scope, file: top.path, display: top.display, line: top.view.permissions.defaultMode.line, keyPath: "permissions.defaultMode", effect: "none", message: `permissions.defaultMode is "bypassPermissions", and in that mode Claude Code lets a sandboxed command connect to any host: the ${domains.length} network.allowedDomains ${domains.length === 1 ? "entry" : "entries"} (${first.display}${first.line ? `:${first.line}` : ""}) restrict nothing. A host in deniedDomains is still refused, and so is every unlisted host once network.strictAllowlist (user settings) or network.allowManagedDomainsOnly (managed settings) is on.`, fix: "Set sandbox.network.strictAllowlist to true in your user settings, or use another permission mode." });
+    }
   }
 
   findings.sort((a, b) => (SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]) || (b.scope === a.scope ? (a.line || 0) - (b.line || 0) : 0));

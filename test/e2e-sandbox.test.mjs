@@ -64,6 +64,25 @@ test("a connection to a host that is not in allowedDomains is refused by the san
   t.diagnostic(`Claude Code ${claudeInfo().version}: default mode, host not listed -> ${one(closed)}; listed -> ${one(open)}; bypassPermissions, host not listed -> ${one(bypass)}; denied -> ${one(bypassManaged)}; strictAllowlist in the user file -> ${one(strictUser)}; in the project file -> ${one(strictProject)}`);
 });
 
+test("the permission mode decides what happens to a host that is not allowed: refused in default, acceptEdits and dontAsk, let through in bypassPermissions, also when settings.json sets the mode", { skip: SKIP, timeout: 400000 }, async (t) => {
+  const seen = {};
+  const go = async (label, mode, user, project = {}) => {
+    const r = await runSession({ label: `mode-${label}`, mode, user: { sandbox: { enabled: true }, ...user }, project, programs: [], commands: [curl("probe-a.invalid")] });
+    const text = r.calls[0] ? r.calls[0].text : "(the call did not come back)";
+    seen[label] = text.replace(/\s+/g, " ").slice(0, 70);
+    return text.includes("403");
+  };
+  assert.equal(await go("default", "default"), true, "default: refused");
+  assert.equal(await go("acceptEdits", "acceptEdits"), true, "acceptEdits: refused (a session would ask)");
+  assert.equal(await go("dontAsk", "dontAsk"), true, "dontAsk: refused");
+  assert.equal(await go("bypassPermissions", "bypassPermissions"), false, "bypassPermissions: let through");
+  assert.equal(await go("settings", null, { permissions: { defaultMode: "bypassPermissions" } }), false, "defaultMode bypassPermissions in settings.json: let through");
+  // recorded, not asserted: a project file that sets the mode
+  const projectLets = (await go("settings-project", null, {}, { permissions: { defaultMode: "bypassPermissions" } })) === false;
+  t.diagnostic(`a project file with defaultMode bypassPermissions lets the host through: ${projectLets}`);
+  t.diagnostic(`Claude Code ${claudeInfo().version}, host not listed: ${Object.entries(seen).map(([k, v]) => `${k} -> ${JSON.stringify(v)}`).join("; ")}`);
+});
+
 test("check agrees with the binary: the sandbox can start here, and check --live finds the command inside the sandbox, the write blocked and the connection refused", { skip: SKIP, timeout: 300000 }, async (t) => {
   const w = world("check-live");
   const plain = runCli(["check", "--json"], { cwd: w.work, env: w.env });

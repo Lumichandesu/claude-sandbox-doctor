@@ -94,7 +94,7 @@ export async function runChunk(group, rows, { timeout = 240000, args = [], appro
  *   user, project, local   the contents of the settings files (objects, or text for a file that is not valid JSON)
  *   programs               the stand-ins to make (default: mytool)
  *   setup                  (sb) => void, called before the files are written (more files, more stand-ins)
- *   mode                   the permission mode (default bypassPermissions, so that every call runs)
+ *   mode                   the permission mode (default bypassPermissions, so that every call runs); null leaves the flag out
  */
 export async function runSession({ label = "session", user, project, local, commands, programs = ["mytool"], setup, mode = "bypassPermissions", env = {}, timeout = 240000 } = {}) {
   const sb = sandbox(label);
@@ -107,7 +107,7 @@ export async function runSession({ label = "session", user, project, local, comm
   const calls = commands.map((c) => (typeof c === "string" ? { command: c } : c));
   const api = await fakeApi({ calls, before: (turn) => fs.appendFileSync(sb.marks, `#ROW ${turn}\n`) });
   try {
-    const run = await runClaude(sb, api, ["-p", "PROBE-MAIN run the calls", "--output-format", "stream-json", "--verbose", "--permission-mode", mode, "--max-turns", String(calls.length + 3)], { env: { CSD_MARKS: sb.marks, ...(typeof env === "function" ? env(sb) : env) }, path: sb.bin, timeout });
+    const run = await runClaude(sb, api, ["-p", "PROBE-MAIN run the calls", "--output-format", "stream-json", "--verbose", ...(mode ? ["--permission-mode", mode] : []), "--max-turns", String(calls.length + 3)], { env: { CSD_MARKS: sb.marks, ...(typeof env === "function" ? env(sb) : env) }, path: sb.bin, timeout });
     const events = streamEvents(run);
     const results = toolCalls(events);
     const marks = readMarks(sb.marks);
