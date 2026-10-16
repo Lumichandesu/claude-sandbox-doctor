@@ -100,6 +100,12 @@ jobs:
           run why "npm test" --project "$HOME/locked" --retry || true
           run why "gh pr list" --project "$HOME/locked" || true
           run why "docker ps" --project "$HOME/shop" --json || true
+      - name: The install line of the README (npx from GitHub, at this commit, with a throwaway npm cache and home; may fail without the network)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          export HOME="$(mktemp -d)" npm_config_cache="$(mktemp -d)"
+          npx -y "github:nrzz/claude-sandbox-doctor#${{ github.sha }}" check --markdown
 
   linux-without:
     name: ubuntu without bubblewrap and socat
@@ -171,3 +177,9 @@ jobs:
         run: |
           node bin/claude-sandbox-doctor.mjs check || true
           node bin/claude-sandbox-doctor.mjs check --live || true
+      - name: The install line of the README (npx from GitHub, at this commit, with a throwaway npm cache and home; may fail without the network)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          export HOME="$(mktemp -d)" npm_config_cache="$(mktemp -d)"
+          npx -y "github:nrzz/claude-sandbox-doctor#${{ github.sha }}" check --markdown

@@ -66,7 +66,7 @@ export function renderCheck(m, { color = false } = {}) {
     if (it.fix && it.status !== "ok") out.push(...indent(`fix: ${it.fix}`, "          ", "          "));
   }
   out.push("");
-  out.push(m.summary);
+  out.push(...wrap(m.summary, 100));
   if (m.live) {
     out.push("");
     out.push(p.bold("Claude Code, put to the test (--live)"));
