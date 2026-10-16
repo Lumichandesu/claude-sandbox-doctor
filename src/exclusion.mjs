@@ -135,23 +135,40 @@ function stepOverEnv(text) {
   }
 }
 
-/** Strip, in turn, harmless assignments, a plain env, and timeout, time, nice, stdbuf and nohup. Returns { text, prefix, stoppedAt }. */
+// The wrappers Claude Code steps over, as the shapes it accepts (put to the binary: `time -p docker ps` is not one of them, `time
+// docker ps` is; the number is the duration of timeout):
+//   timeout [--foreground|--preserve-status|--verbose|-v|--kill-after=X|--signal=X|--kill-after X|--signal X|-k X|-s X|-kX|-sX]... [--] 5s
+//   time [--]      nice [-n N | -N] [--]      stdbuf -oL [-eL ...] [--]      nohup [--]
+const WORD = "[A-Za-z0-9_.+-]+";
+const WRAPPERS = [
+  new RegExp(`^timeout[ \\t]+(?:(?:--(?:foreground|preserve-status|verbose)|--(?:kill-after|signal)=${WORD}|--(?:kill-after|signal)[ \\t]+${WORD}|-v|-[ks][ \\t]+${WORD}|-[ks]${WORD})[ \\t]+)*(?:--[ \\t]+)?\\d+(?:\\.\\d+)?[smhd]?[ \\t]+`),
+  /^time[ \t]+(?:--[ \t]+)?/,
+  /^nice(?:[ \t]+-n[ \t]+-?\d+|[ \t]+-\d+)?[ \t]+(?:--[ \t]+)?/,
+  /^stdbuf(?:[ \t]+-[ioe][LN0-9]+)+[ \t]+(?:--[ \t]+)?/,
+  /^nohup[ \t]+(?:--[ \t]+)?/,
+];
+
+/** The text after one wrapper, or null when the text does not start with one that Claude Code reads. */
+function stepOverWrapper(text) {
+  for (const re of WRAPPERS) {
+    const m = re.exec(text);
+    if (m) return text.slice(m[0].length);
+  }
+  return null;
+}
+
+/** Strip, in turn, harmless assignments, a plain env, and timeout, time, nice, stdbuf and nohup. Returns { text, prefix }. */
 export function normalizePart(part) {
   let text = part.trim();
   let prefix = "";
-  let guard = 0;
-  for (; guard < 20; guard++) {
+  for (let guard = 0; guard < 20; guard++) {
     const before = text;
     text = stepOverAssignments(text);
     text = stepOverEnv(text);
-    const words = wordsOf(text).map((w) => w.text);
-    if (words.length && LOOKED_THROUGH.includes(words[0])) {
-      const k = wrapperLength(words, 0, { deep: false });
-      if (k > 0) {
-        const rest = stripWords(text, k);
-        prefix += text.slice(0, text.length - rest.length);
-        text = rest;
-      }
+    const rest = stepOverWrapper(text);
+    if (rest !== null && rest.trim() !== "") {
+      prefix += text.slice(0, text.length - rest.length);
+      text = rest;
     }
     if (text === before) break;
   }

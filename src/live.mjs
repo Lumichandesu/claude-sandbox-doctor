@@ -120,11 +120,14 @@ export function readStream(out, err) {
 export function judge(kind, call, { denied = false, fileCreated = false, warnings = [] } = {}) {
   if (!call) return { outcome: "unknown", evidence: "the call did not come back" };
   const t = call.text || "";
-  if (/bwrap: |bubblewrap: /.test(t) && !/sandbox-doctor-probe/.test(t.split("bwrap")[0] || "x")) {
-    const line = t.split("\n").find((l) => /bwrap: /.test(l)) || t.split("\n")[0];
-    return { outcome: "error", evidence: `the sandbox could not start the command: ${line.trim()}` };
+  const violation = /<sandbox_violations>([\s\S]*?)<\/sandbox_violations>/.exec(t);
+  const bwrap = /^bwrap: .*$/m.exec(t);
+  if (bwrap && !violation) return { outcome: "error", evidence: `the sandbox could not start the command: ${bwrap[0].trim()}` };
+  if (kind === "network" && (violation || /^403$/m.test(t))) {
+    const v = violation ? /deny network-outbound ([^\s]+)/.exec(violation[1]) : null;
+    return { outcome: "blocked", evidence: `the sandbox's proxy refused it${v ? ` and named ${v[1]}` : " (HTTP 403)"}` };
   }
-  if (denied || /requested permissions to use Bash|haven't granted it yet|requires approval|permission to use Bash/i.test(t)) {
+  if (denied || /requested permissions to use|haven't granted it yet|requires approval|has been denied|Run outside of the sandbox/i.test(t)) {
     return { outcome: "refused", evidence: `Claude Code did not run it without asking${warnings.length ? ` (${warnings[0]})` : ""}` };
   }
   if (kind === "inside") {
@@ -137,10 +140,6 @@ export function judge(kind, call, { denied = false, fileCreated = false, warning
     return m ? { outcome: "blocked", evidence: `the write failed: ${m[1]}` } : { outcome: "unknown", evidence: first(t) };
   }
   if (kind === "network") {
-    if (/<sandbox_violations>[\s\S]*network/.test(t) || /http=403/.test(t)) {
-      const v = (/deny network-outbound ([^\s]+)/.exec(t) || [])[1];
-      return { outcome: "blocked", evidence: `the sandbox's proxy answered 403${v ? ` and named ${v}` : ""}` };
-    }
     if (/Could not resolve host|Network is unreachable|Temporary failure in name resolution/.test(t)) return { outcome: "blocked", evidence: "the command has no route out: it could not resolve the host" };
     if (/curl: .*not found|command not found/.test(t)) return { outcome: "unknown", evidence: "curl is not installed here" };
     return { outcome: "unknown", evidence: first(t) };
@@ -171,7 +170,7 @@ export async function runLive({ claude, sys, timeout = 120000, extraSettings = {
   const probes = [
     { id: "inside", kind: "inside", title: "a command runs inside the sandbox", command: "printenv SANDBOX_RUNTIME" },
     { id: "write", kind: "write", title: "a write outside the project", command: `touch ${JSON.stringify(outside)}` },
-    { id: "network", kind: "network", title: "a connection to a host that is not allowed", command: 'curl -sS -m 10 -o /dev/null -w "http=%{http_code}\\n" http://sandbox-doctor-probe.invalid/' },
+    { id: "network", kind: "network", title: "a connection to a host that is not allowed", command: 'curl -sS -m 10 -o /dev/null -w "%{http_code}" http://sandbox-doctor-probe.invalid/' },
   ];
   const api = await startFakeApi(probes.map((p) => ({ command: p.command, description: p.title })));
   const env = scrubbedEnv(sys.env, { CLAUDE_CONFIG_DIR: cfg, HOME: home, USERPROFILE: home, ANTHROPIC_API_KEY: "sk-ant-probe", ANTHROPIC_BASE_URL: `http://127.0.0.1:${api.port}` });
@@ -199,7 +198,7 @@ export async function runLive({ claude, sys, timeout = 120000, extraSettings = {
     probes.forEach((p, i) => {
       const call = s.calls.find((c) => c.id === `toolu_probe_${i}`);
       const j = judge(p.kind, call, { denied: denials.has(`toolu_probe_${i}`), fileCreated: p.kind === "write" && fs.existsSync(outside), warnings: s.warnings });
-      result.probes.push({ id: p.id, title: p.title, command: p.command, outcome: j.outcome, evidence: j.evidence, decision: call && call.decision ? call.decision.decision : null });
+      result.probes.push({ id: p.id, title: p.title, command: p.command, outcome: j.outcome, evidence: j.evidence, decision: call && call.decision ? call.decision.decision : null, text: call ? call.text.slice(0, 400) : null });
     });
     if (result.startError && !s.calls.length) for (const p of result.probes) { p.outcome = "error"; p.evidence = result.startError; }
     const by = Object.fromEntries(result.probes.map((p) => [p.id, p.outcome]));

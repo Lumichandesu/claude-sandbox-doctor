@@ -183,30 +183,40 @@ export function checkHost(sys, { settings = {}, light = false } = {}) {
     return out;
   }
 
-  // trial 1: the mounts and namespaces Claude Code asks bubblewrap for
-  const claudeArgs = ["--new-session", "--die-with-parent", "--unshare-net", "--ro-bind", "/", "/", "--dev", "/dev", "--unshare-pid", "--unshare-user", "--cap-drop", "ALL", "--proc", "/proc", "--", "/bin/bash", "-c", "echo sandbox-doctor-ok"];
+  // the mounts and namespaces Claude Code asks bubblewrap for (read from its command line, 2.1.301): the host mounted read-only, a
+  // new session, process, user and network namespace, every capability dropped, a fresh /proc (or the container's, when
+  // enableWeakerNestedSandbox is on)
   const weaker = settings.enableWeakerNestedSandbox === true;
-  const args = weaker ? claudeArgs.map((a) => a).filter((a) => a !== "--proc" && a !== "/proc").concat([]) : claudeArgs;
-  const r = sys.exec(bw, weaker ? [...claudeArgs.slice(0, claudeArgs.indexOf("--proc")), "--bind", "/proc", "/proc", ...claudeArgs.slice(claudeArgs.indexOf("--proc") + 2)] : args, { timeout: 15000 });
-  const shown = `bwrap ${claudeArgs.join(" ")}`;
+  const mountArgs = ["--new-session", "--die-with-parent", "--unshare-net", "--ro-bind", "/", "/", "--dev", "/dev", "--unshare-pid", "--unshare-user", "--cap-drop", "ALL", ...(weaker ? ["--bind", "/proc", "/proc"] : ["--proc", "/proc"]), "--", "/bin/bash", "-c", "echo sandbox-doctor-ok"];
+  const shown = `bwrap ${mountArgs.join(" ")}`;
+  const r = sys.exec(bw, mountArgs, { timeout: 15000 });
+  let started = false;
   if (r.status === 0 && /sandbox-doctor-ok/.test(r.stdout)) {
+    started = true;
     push(item("namespaces", "ok", "bubblewrap starts a shell with a user, process and network namespace and the host mounted read-only", { detail: `${nsDetail || "no sysctl is readable"}; the trial is ${shown}` }));
     const merged = sys.isSymlink("/bin") && /usr/.test(String(sys.readLink("/bin")));
     push(item("merged-usr", "ok", merged ? "/bin is a link to usr/bin (merged-usr), and /bin/bash runs inside the sandbox's mounts" : "/bin/bash runs inside the sandbox's mounts", { detail: merged ? "Claude Code mounts / as a whole, so the links survive; a sandbox that mounted only /usr would fail with \"execvp /bin/bash: No such file or directory\" (anthropics/claude-code#99680)." : "" }));
-    // trial 2: a user namespace inside the sandbox, as the seccomp helper makes (anthropics/claude-code#43454)
-    const un = sys.which("unshare");
-    if (!un) push(item("setgroups", "skip", "writing /proc/self/setgroups in a nested user namespace was not tried", { detail: "unshare is not installed" }));
-    else {
-      const t2 = sys.exec(bw, ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--unshare-user", "--cap-drop", "ALL", "--", un, "-U", "sh", "-c", "echo deny > /proc/self/setgroups"], { timeout: 15000 });
-      if (t2.status === 0) push(item("setgroups", "ok", "a user namespace inside the sandbox can write /proc/self/setgroups", { detail: "This is the step that failed in anthropics/claude-code#43454 (apply-seccomp: write /proc/self/setgroups: Permission denied)." }));
-      else push(item("setgroups", "warn", `a user namespace inside the sandbox cannot write /proc/self/setgroups: ${first(t2.stderr) || `exit ${t2.status}`}`, { detail: "Claude Code's apply-seccomp helper does the same step to block Unix sockets; where it fails, commands fail with \"apply-seccomp: write /proc/self/setgroups\" (anthropics/claude-code#43454, 54 reactions on 16 October 2026). The step here is an approximation of the helper's.", fix: "Update Claude Code; the issue is open. Until it is fixed, take the commands out of the sandbox with excludedCommands or run Claude Code on a kernel where the nested namespace is allowed." }));
-    }
   } else {
     out.broken = true;
     const text = `${r.stderr}${r.stdout}`.trim();
     const e = explainBwrapError(text, { apparmorRestricts, userns: { clone: ns.clone, max: ns.max } });
     push(item("namespaces", "fail", `bubblewrap cannot start a sandbox: ${first(text) || r.error || `exit ${r.status}`}`, { detail: `${e.text}. ${nsDetail ? `Seen: ${nsDetail}. ` : ""}The trial is ${shown}`, fix: e.fix, issue: e.issue || null }));
     if (e.kind === "exec") push(item("merged-usr", "fail", "/bin/bash does not run inside the mounts (execvp: No such file or directory)", { fix: e.fix, issue: e.issue }));
+  }
+  // the command of anthropics/claude-code#43454: a new user namespace, and a write to /proc/self/setgroups in it
+  const un = sys.which("unshare");
+  if (!un) push(item("setgroups", "skip", "writing /proc/self/setgroups in a new user namespace was not tried", { detail: "unshare is not installed" }));
+  else {
+    const t2 = sys.exec(un, ["-U", "sh", "-c", "echo deny > /proc/self/setgroups"], { timeout: 15000 });
+    if (t2.status === 0) push(item("setgroups", "ok", "a new user namespace can write /proc/self/setgroups", { detail: "This is the step that failed in anthropics/claude-code#43454 (apply-seccomp: write /proc/self/setgroups: Permission denied)." }));
+    else {
+      const why = first(t2.stderr) || `exit ${t2.status}`;
+      push(item("setgroups", started ? "info" : "warn", `unshare -U cannot write /proc/self/setgroups here: ${why}`, {
+        detail: started
+          ? "This is the command of anthropics/claude-code#43454 (54 reactions on 16 October 2026), where Claude Code's apply-seccomp helper fails with \"write /proc/self/setgroups: Permission denied\". Here bubblewrap starts anyway, so the command does not by itself stop the sandbox: --live shows what Claude Code does."
+          : "This is the command of anthropics/claude-code#43454, where Claude Code's apply-seccomp helper fails with \"write /proc/self/setgroups: Permission denied\". Bubblewrap fails here too, so user namespaces are restricted on this machine.",
+      }));
+    }
   }
   out.summary = out.ok ? "The sandbox can start on this machine." : out.missing.length ? `Missing: ${out.missing.join(", ")}.` : "The sandbox cannot start on this machine.";
   return out;

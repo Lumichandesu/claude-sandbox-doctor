@@ -6,8 +6,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { claudeInfo, skip, IS_WIN } from "./claude-sandbox.mjs";
-import { groups, rows } from "./why-table.mjs";
-import { runGroups } from "./oracle.mjs";
+import { approvalGroups, approvals, groups, rows } from "./why-table.mjs";
+import { approvalOf, runGroups } from "./oracle.mjs";
 
 const RECORDED = [];
 const SKIP = skip() || (IS_WIN && "the Bash sandbox exists on Linux, WSL2 and macOS only");
@@ -34,4 +34,18 @@ test("the table of calls put to the binary: every row", { skip: SKIP, timeout: 2
     assert.deepEqual(differ.filter((d) => d.row.core).map(show), [], "the core rows");
     assert.ok(differ.length / rows.length <= 0.05, `${differ.length} of ${rows.length} rows differ on Claude Code ${version}`);
   }
+});
+
+test("who approves the call (permission mode default, no allow rule for Bash): the approval table put to the binary", { skip: SKIP, timeout: 1200000 }, async (t) => {
+  const results = await runGroups(approvalGroups(), { limit: process.platform === "darwin" ? 3 : 4, approval: true });
+  const byId = new Map(results.map((r) => [r.row.id, r]));
+  const differ = [];
+  for (const row of approvals) {
+    const got = byId.get(row.id);
+    const seen = got ? approvalOf(got) : "no result";
+    if (seen !== row.expect) differ.push(`${row.id} ${JSON.stringify(row.command)}: expected ${row.expect}, the binary did ${seen} (${got ? JSON.stringify(String(got.text).slice(0, 140)) : ""} decision=${got ? JSON.stringify(got.decision) : ""})`);
+  }
+  t.diagnostic(`Claude Code ${claudeInfo().version}: ${approvals.length - differ.length} of ${approvals.length} approval rows gave the recorded answer`);
+  for (const d of differ) t.diagnostic(`  differs: ${d}`);
+  assert.deepEqual(differ, []);
 });

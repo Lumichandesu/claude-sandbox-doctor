@@ -51,18 +51,18 @@ export function placeOf(marks) {
 /**
  * Run the rows of one group (at most `chunk` of them in one session). Returns [{ row, place, marks, text, isError, decision }].
  */
-export async function runChunk(group, rows, { timeout = 240000, args = [], allowBash = true } = {}) {
+export async function runChunk(group, rows, { timeout = 240000, args = [], approval = false } = {}) {
   const sb = sandbox("table");
   shims(sb, PROGRAMS);
-  // the git stand-in says "not a repository" to the questions Claude Code itself asks at start
-  put(path.join(sb.bin, "git"), ['#!/bin/sh', 'if [ -n "$SANDBOX_RUNTIME" ]; then s=1; else s=0; fi', 'printf "%s %s\\n" git "$s" >> "$CSD_MARKS"', 'case "$1" in rev-parse|status|log|branch|config|remote|diff|ls-files|worktree|symbolic-ref|describe|show-ref) if [ "$CSD_GIT_QUIET" = "1" ]; then exit 128; fi;; esac', "exit 0", ""].join("\n"), 0o755);
+  // timeout and stdbuf as every system has them: skip the options (and the duration), run the rest
+  for (const name of ["timeout", "stdbuf"]) put(path.join(sb.bin, name), ["#!/bin/sh", 'while [ $# -gt 0 ]; do case "$1" in -k|-s|--kill-after|--signal) shift 2;; -*) shift;; *) break;; esac; done', name === "timeout" ? "shift" : ":", 'exec "$@"', ""].join("\n"), 0o755);
   for (const [rel, text] of Object.entries(FILES)) put(path.join(sb.work, rel), text, rel.endsWith(".sh") ? 0o755 : undefined);
-  writeSettings(sb, group.settings, { allowBash });
+  writeSettings(sb, group.settings, { allowBash: false });
   fs.writeFileSync(sb.marks, "");
   const calls = rows.map((r) => ({ command: fill(r.command, sb), ...(r.retry ? { dangerouslyDisableSandbox: true } : {}) }));
   const api = await fakeApi({ calls, before: (turn) => fs.appendFileSync(sb.marks, `#ROW ${turn}\n`) });
   try {
-    const run = await runClaude(sb, api, ["-p", "PROBE-MAIN run the calls", "--output-format", "stream-json", "--verbose", "--permission-mode", "default", "--max-turns", String(calls.length + 3), ...args], { env: { CSD_MARKS: sb.marks, ...(group.env || {}) }, path: sb.bin, timeout });
+    const run = await runClaude(sb, api, ["-p", "PROBE-MAIN run the calls", "--output-format", "stream-json", "--verbose", "--permission-mode", approval ? "default" : "bypassPermissions", "--max-turns", String(calls.length + 3), ...args], { env: { CSD_MARKS: sb.marks, ...(group.env || {}) }, path: sb.bin, timeout });
     const events = streamEvents(run);
     const results = toolCalls(events);
     const marks = readMarks(sb.marks);
@@ -78,7 +78,7 @@ export async function runChunk(group, rows, { timeout = 240000, args = [], allow
 }
 
 /** Run every group, with at most `limit` binaries at once. Results come back in the order of `rows`. */
-export async function runGroups(groups, { limit = 4, chunk = 24 } = {}) {
+export async function runGroups(groups, { limit = 4, chunk = 24, approval = false } = {}) {
   const jobs = [];
   for (const g of groups) for (let i = 0; i < g.rows.length; i += chunk) jobs.push({ group: g, rows: g.rows.slice(i, i + chunk) });
   const out = [];
@@ -89,7 +89,7 @@ export async function runGroups(groups, { limit = 4, chunk = 24 } = {}) {
       if (i >= jobs.length) return;
       let r;
       for (let attempt = 0; attempt < 3; attempt++) {
-        r = await runChunk(jobs[i].group, jobs[i].rows);
+        r = await runChunk(jobs[i].group, jobs[i].rows, { approval });
         // a session that never reached its calls is run again
         if (r.some((x) => x.called)) break;
       }
@@ -119,3 +119,10 @@ export function firstCode(result) {
 }
 
 export { detectPlatform, realSys };
+
+/** What the permission system did with a call of the approval table: "approved" (it ran), "denied" (a deny rule), or "asked". */
+export function approvalOf(result) {
+  if (result.place !== null) return "approved";
+  if (/has been denied|denied by|deny rule/i.test(result.text || "")) return "denied";
+  return "asked";
+}

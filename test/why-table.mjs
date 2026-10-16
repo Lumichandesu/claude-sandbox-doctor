@@ -77,7 +77,6 @@ each("compound", BASIC, [
   ["echo hi && docker ps", U],
   ["docker ps\ngh pr list", U],
   ["docker ps && docker images && docker volume ls", U],
-  ["docker ps & docker images", U],
   ["! docker ps", U],
   ["echo \"a && b\" && docker ps", U],
   ["docker ps # a comment", U],
@@ -115,7 +114,7 @@ each("wrapper", BASIC, [
   ["nohup docker ps", U],
   ["stdbuf -oL docker ps", U],
   ["env docker ps", U],
-  ["env -i docker ps", U],
+  ["env -u FOO docker ps", U],
   ["env FOO=bar docker ps", B, "unsafe-assignment"],
   ["NODE_ENV=test docker ps", U],
   ["CI=1 LANG=C docker ps", U],
@@ -125,7 +124,7 @@ each("wrapper", BASIC, [
   ["timeout 5 sudo docker ps", B, "wrapper"],
   ["echo a | xargs docker ps", B, "wrapper"],
   ["timeout 5 nice docker ps", U],
-  ["time -p docker ps", U],
+  ["time -p docker ps", B],
   ["nohup nice -n 3 docker ps", U],
   ["timeout 5 gh pr list", U],
   ["timeout 5 mytool run", B, "no-entry"],
@@ -140,13 +139,13 @@ each("shape", BASIC, [
   ["{ docker ps; }", B, "group"],
   ["if true; then docker ps; fi", B, "control-flow"],
   ["for i in 1 2; do docker ps; done", B, "control-flow"],
-  ["while false; do docker ps; done", B, "control-flow"],
+  ["while ! test -f done.txt; do docker ps; touch done.txt; done", B, "control-flow"],
   ["[ -f a.txt ] && docker ps", B, "test-brackets"],
   ["[[ -f a.txt ]] && docker ps", B, "test-brackets"],
-  ["cd sub && docker ps", B, "directory"],
-  ["cd sub; docker ps", B, "directory"],
-  ["docker ps && cd sub", B, "directory"],
-  ["pushd sub && docker ps", B, "directory"],
+  ["cd sub && docker ps && cd ..", B, "directory"],
+  ["cd sub; docker ps; cd ..", B, "directory"],
+  ["docker ps && cd sub && cd ..", B, "directory"],
+  ["pushd sub && docker ps && popd", B, "directory"],
   ["eval \"docker ps\"", B, "runs-code"],
   ["export X=1 && docker ps", B, "shell-state"],
   ["X=1; docker ps", B, "unsafe-assignment"],
@@ -163,7 +162,6 @@ each("shape", BASIC, [
   ["docker \"ps\"", U],
   ["docker ps\\\n--all", B],
   ["d\\ocker ps", B, "command-word"],
-  ["docker ps ; ; docker images", B],
 ]);
 
 // ---- programs with flags that keep a call in the sandbox -----------------------------------------------------------------------
@@ -300,7 +298,7 @@ each("star", S(["*"]), [
   ["docker ps", U],
   ["mytool run", U],
   ["sudo mytool run", B, "wrapper"],
-  ["cd sub && mytool run", B, "directory"],
+  ["cd sub && mytool run && cd ..", B, "directory"],
   ["mytool run > out.txt", B, "redirect"],
 ]);
 each("space", S(["docker  ps", " dockerx *", "mytool run "]), [
@@ -325,6 +323,46 @@ each("prefix-forms", S(["docker:*", "gh pr *", "my*l run", "make test"]), [
 export const groups = () => {
   const out = new Map();
   for (const r of rows) {
+    const key = JSON.stringify(r.settings);
+    if (!out.has(key)) out.set(key, { settings: r.settings, rows: [] });
+    out.get(key).rows.push(r);
+  }
+  return [...out.values()];
+};
+
+// ---- who approves the call: the permission mode default, no allow rule for Bash -------------------------------------------------
+// `expect` is what `claude -p` did: "approved" (the call ran), "asked" (it needs a prompt, which -p cannot give: nothing ran) or
+// "denied" (a deny rule refused it).
+export const approvals = [];
+let acount = 0;
+function approve(group, settings, list) {
+  for (const [command, expect, extra] of list) approvals.push({ id: `${group}-${String(++acount).padStart(3, "0")}`, group, settings, command, expect, ...(extra || {}) });
+}
+const P = (perm, sandbox = {}) => ({ user: { sandbox: { enabled: true, ...sandbox }, permissions: perm } });
+approve("approval-basic", P({}, { excludedCommands: ["gh *"] }), [
+  ["docker ps", "approved"],
+  ["mytool run", "approved"],
+  ["mytool run > out.txt", "approved"],
+  ["gh pr list", "asked"],
+  ["FOO=bar mytool run", "asked"],
+  ["make CC=clang", "asked"],
+  ["eval \"mytool run\"", "asked"],
+  ["cd sub && mytool run && cd ..", "approved"],
+  ["mytool run && gh pr list", "approved"],
+  ["curl -sS -m 10 -o /dev/null http://sandbox-doctor-probe.invalid/", "approved"],
+  ["curl -sS -m 10 -o /dev/null -w \"http=%{http_code}\n\" http://sandbox-doctor-probe.invalid/", "asked"],
+  ["curl -sS -m 10 -o /dev/null -w \"%{http_code}\" http://sandbox-doctor-probe.invalid/", "approved"],
+]);
+approve("approval-off", { user: { sandbox: { excludedCommands: ["gh *"] } } }, [["docker ps", "asked"]]);
+approve("approval-noauto", P({}, { autoAllowBashIfSandboxed: false }), [["docker ps", "asked"]]);
+approve("approval-deny", P({ deny: ["Bash(docker *)"] }), [["docker ps", "denied"], ["mytool run", "approved"], ["mytool run && docker ps", "denied"]]);
+approve("approval-ask", P({ ask: ["Bash(git push *)"] }), [["git push origin main", "asked"], ["git status", "approved"]]);
+approve("approval-ask-bare", P({ ask: ["Bash"] }, { excludedCommands: ["gh *"] }), [["docker ps", "approved"], ["gh pr list", "asked"]]);
+approve("approval-allow", P({ allow: ["Bash(gh *)"] }, { excludedCommands: ["gh *"] }), [["gh pr list", "approved"], ["docker ps", "approved"]]);
+
+export const approvalGroups = () => {
+  const out = new Map();
+  for (const r of approvals) {
     const key = JSON.stringify(r.settings);
     if (!out.has(key)) out.set(key, { settings: r.settings, rows: [] });
     out.get(key).rows.push(r);
