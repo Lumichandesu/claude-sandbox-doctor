@@ -6,7 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { claudeInfo, skip, IS_WIN } from "./claude-sandbox.mjs";
-import { approvalGroups, approvals, groups, rows } from "./why-table.mjs";
+import { approvalGroups, approvals, groups, tableRows as rows } from "./why-table.mjs";
 import { approvalOf, runGroups } from "./oracle.mjs";
 
 const RECORDED = [];

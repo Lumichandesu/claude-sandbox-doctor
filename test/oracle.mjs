@@ -14,6 +14,7 @@ import { loadSettings } from "../src/settings.mjs";
 import { whyCommand } from "../src/why.mjs";
 import { detectPlatform, realSys } from "../src/host.mjs";
 import { FILES, PROGRAMS } from "./why-table.mjs";
+import { clearManaged, setManaged } from "./managed.mjs";
 
 const fill = (command, sb) => command.split("{BIN}").join(fwd(sb.bin));
 
@@ -58,6 +59,8 @@ export async function runChunk(group, rows, { timeout = 240000, args = [], appro
   for (const name of ["timeout", "stdbuf"]) put(path.join(sb.bin, name), ["#!/bin/sh", 'while [ $# -gt 0 ]; do case "$1" in -k|-s|--kill-after|--signal) shift 2;; -*) shift;; *) break;; esac; done', name === "timeout" ? "shift" : ":", 'exec "$@"', ""].join("\n"), 0o755);
   for (const [rel, text] of Object.entries(FILES)) put(path.join(sb.work, rel), text, rel.endsWith(".sh") ? 0o755 : undefined);
   writeSettings(sb, group.settings, { allowBash: false });
+  // a group with managed settings needs the file in the system folder for as long as the session runs (see test/managed.mjs)
+  if (group.settings.managed) setManaged(group.settings.managed);
   fs.writeFileSync(sb.marks, "");
   const calls = rows.map((r) => ({ command: fill(r.command, sb), ...(r.retry ? { dangerouslyDisableSandbox: true } : {}) }));
   const api = await fakeApi({ calls, before: (turn) => fs.appendFileSync(sb.marks, `#ROW ${turn}\n`) });
@@ -73,7 +76,37 @@ export async function runChunk(group, rows, { timeout = 240000, args = [], appro
     });
   } finally {
     await api.close();
+    if (group.settings.managed) clearManaged();
     try { fs.rmSync(sb.root, { recursive: true, force: true }); } catch { /* the OS cleans the temp folder eventually */ }
+  }
+}
+
+/**
+ * One session of `claude -p` with the stand-in programs on the PATH: the settings files, the calls, and for each call the place it
+ * ran (placeOf) and what came back. For the checks that put one question to the binary, where runChunk runs a whole table.
+ *   user, project, local   the contents of the settings files (objects, or text for a file that is not valid JSON)
+ *   programs               the stand-ins to make (default: mytool)
+ *   setup                  (sb) => void, called before the files are written (more files, more stand-ins)
+ *   mode                   the permission mode (default bypassPermissions, so that every call runs)
+ */
+export async function runSession({ label = "session", user, project, local, commands, programs = ["mytool"], setup, mode = "bypassPermissions", env = {}, timeout = 240000 } = {}) {
+  const sb = sandbox(label);
+  shims(sb, programs);
+  if (setup) setup(sb);
+  if (user !== undefined) put(sb.user, user);
+  if (project !== undefined) put(sb.project, project);
+  if (local !== undefined) put(sb.local, local);
+  fs.writeFileSync(sb.marks, "");
+  const calls = commands.map((c) => (typeof c === "string" ? { command: c } : c));
+  const api = await fakeApi({ calls, before: (turn) => fs.appendFileSync(sb.marks, `#ROW ${turn}\n`) });
+  try {
+    const run = await runClaude(sb, api, ["-p", "PROBE-MAIN run the calls", "--output-format", "stream-json", "--verbose", "--permission-mode", mode, "--max-turns", String(calls.length + 3)], { env: { CSD_MARKS: sb.marks, ...(typeof env === "function" ? env(sb) : env) }, path: sb.bin, timeout });
+    const events = streamEvents(run);
+    const results = toolCalls(events);
+    const marks = readMarks(sb.marks);
+    return { sb, run, events, calls: calls.map((_, n) => results.find((c) => c.id === `toolu_call_${n}`) || null), places: calls.map((_, n) => placeOf(marks[n])), marks, result: resultEvent(events) };
+  } finally {
+    await api.close();
   }
 }
 
@@ -107,6 +140,7 @@ export function predict(row, { platform = "linux" } = {}) {
   if (s.user) w.user(s.user);
   if (s.project) w.project(s.project);
   if (s.local) w.local(s.local);
+  if (s.managed) w.managed(s.managed);
   const settings = loadSettings({ project: w.work, env: w.env, home: w.home, managed: w.managedDir, platform: "linux" });
   return whyCommand({ command: row.command, settings, platform, retry: Boolean(row.retry) });
 }

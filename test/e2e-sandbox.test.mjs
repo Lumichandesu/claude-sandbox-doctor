@@ -4,7 +4,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { claudeInfo, fakeApi, put, runClaude, sandbox, skip, streamEvents, toolCalls, IS_WIN } from "./claude-sandbox.mjs";
+import { CLAUDE, claudeInfo, fakeApi, put, runClaude, sandbox, skip, streamEvents, toolCalls, IS_WIN } from "./claude-sandbox.mjs";
+import { runSession } from "./oracle.mjs";
+import { runCli, world } from "./helpers.mjs";
 
 const SKIP = skip() || (IS_WIN && "the Bash sandbox exists on Linux, WSL2 and macOS only");
 const LINUX = process.platform === "linux";
@@ -37,4 +39,32 @@ test("a write outside the project is blocked inside the sandbox, a call taken ou
   assert.equal(fs.existsSync(path.join(sb0.home, "outside-write-2")), true, "the excluded call ran outside the sandbox and wrote");
   t.diagnostic(`Claude Code ${claudeInfo().version}: write outside -> ${JSON.stringify(write.text.split("\n")[1] || write.text).slice(0, 140)}`);
   void out;
+});
+
+const curl = (host) => `curl -sS -m 10 -o /dev/null -w "%{http_code}" http://${host}/`;
+
+test("a connection to a host that is not in allowedDomains is refused by the sandbox's proxy and the result names the host; with the host in allowedDomains the proxy lets it through", { skip: SKIP, timeout: 300000 }, async (t) => {
+  const closed = await runSession({ label: "net-closed", user: { sandbox: { enabled: true } }, project: {}, programs: [], commands: [curl("probe-a.invalid")] });
+  const open = await runSession({ label: "net-open", user: { sandbox: { enabled: true, network: { allowedDomains: ["probe-a.invalid"] } } }, project: {}, programs: [], commands: [curl("probe-a.invalid")] });
+  const refused = closed.calls[0].text;
+  assert.ok(refused.includes("403"), refused);
+  assert.ok(refused.includes("network-outbound probe-a.invalid:80"), refused);
+  assert.ok(!open.calls[0].text.includes("403"), open.calls[0].text);
+  assert.ok(!open.calls[0].text.includes("network-outbound"), open.calls[0].text);
+  t.diagnostic(`Claude Code ${claudeInfo().version}: refused -> ${JSON.stringify(refused.replace(/\s+/g, " ").slice(0, 160))}; allowed -> ${JSON.stringify(open.calls[0].text.replace(/\s+/g, " ").slice(0, 160))}`);
+});
+
+test("check agrees with the binary: the sandbox can start here, and check --live finds the command inside the sandbox, the write blocked and the connection refused", { skip: SKIP, timeout: 300000 }, async (t) => {
+  const w = world("check-live");
+  const plain = runCli(["check", "--json"], { cwd: w.work, env: w.env });
+  assert.equal(plain.code, 0, plain.all);
+  assert.equal(JSON.parse(plain.out).ok, true);
+  const live = runCli(["check", "--live", "--json", "--claude", CLAUDE], { cwd: w.work, env: w.env, timeout: 280000 });
+  assert.equal(live.code, 0, live.all);
+  const j = JSON.parse(live.out);
+  assert.equal(j.live.skipped, false);
+  assert.deepEqual(j.live.probes.map((p) => `${p.id}:${p.outcome}`), ["inside:inside", "write:blocked", "network:blocked"]);
+  assert.equal(j.live.ok, true);
+  assert.match(j.live.version, /Claude Code/);
+  t.diagnostic(`check --live on ${process.platform} with ${j.live.version}: ${j.live.probes.map((p) => `${p.id} ${p.outcome} (${p.evidence})`).join("; ")}`);
 });

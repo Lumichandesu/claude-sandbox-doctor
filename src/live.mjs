@@ -19,7 +19,10 @@ const USAGE = { input_tokens: 1, output_tokens: 1 };
 export function findClaude(given, sys) {
   if (given) {
     const p = path.resolve(given);
-    return sys.exists(p) ? { path: p } : { error: `${given} does not exist` };
+    if (sys.exists(p)) return { path: p };
+    // a bare name is looked up on the PATH, as a shell would
+    const onPath = !/[\\/]/.test(given) ? sys.which(given) : null;
+    return onPath ? { path: onPath } : { error: `${given} does not exist` };
   }
   for (const name of sys.platform === "win32" ? ["claude.exe", "claude.cmd", "claude"] : ["claude"]) {
     const p = sys.which(name);

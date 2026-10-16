@@ -319,16 +319,64 @@ each("prefix-forms", S(["docker:*", "gh pr *", "my*l run", "make test"]), [
   ["make test x", B, "no-entry"],
 ]);
 
-/** The groups, each with the settings every row of it shares. */
-export const groups = () => {
+// ---- managed settings ------------------------------------------------------------------------------------------------------------
+// The rows below need a managed-settings.json in the system folder, which the real Claude Code reads from there and from nowhere
+// else. test/e2e-managed.test.mjs writes it with sudo on a CI runner (test/managed.mjs) and runs these rows one group at a time;
+// the main table (test/e2e-table.test.mjs) leaves them out. `why` is held to them without a binary, in test/why-table.test.mjs.
+const M = (managed, rest = {}) => ({ managed: { sandbox: { enabled: true, ...managed } }, ...rest });
+const PROJECT_TOOL = { sandbox: { excludedCommands: ["mytool *"], allowUnsandboxedCommands: true } };
+
+each("managed-strict", M({ allowUnsandboxedCommands: false }, { project: PROJECT_TOOL }), [
+  ["mytool run", B],
+  ["mytool run", B, null, { retry: true }],
+]);
+each("managed-entries", M({ excludedCommands: ["mytool *"], allowUnsandboxedCommands: false }, { project: { sandbox: { excludedCommands: ["git status"] } } }), [
+  ["mytool run", U],
+  ["git status", B],
+  ["mytool run && git status", B],
+]);
+each("managed-plain", M({}, { project: PROJECT_TOOL }), [
+  ["mytool run", U],
+  ["git status", U, null, { retry: true }],
+]);
+each("managed-domains-only", M({ network: { allowManagedDomainsOnly: true } }, { project: PROJECT_TOOL, user: { sandbox: { excludedCommands: ["git status"] } } }), [
+  ["mytool run", B],
+  ["git status", U],
+]);
+each("managed-other-platform", M({ enabledPlatforms: ["windows"] }, { project: PROJECT_TOOL }), [
+  ["mytool run", U],
+  ["git status", U],
+]);
+each("managed-platform-typo", M({ enabledPlatforms: ["mac"] }, { project: PROJECT_TOOL }), [
+  ["mytool run", U],
+]);
+each("managed-this-platform", M({ enabledPlatforms: ["linux", "macos"] }, { project: PROJECT_TOOL }), [
+  ["mytool run", U],
+  ["git status", B, "no-entry"],
+]);
+each("managed-user-strict", M({}, { user: { sandbox: { allowUnsandboxedCommands: false } }, project: PROJECT_TOOL }), [
+  ["mytool run", U],
+  ["git status", B, null, { retry: true }],
+]);
+
+/** Rows for the main table: the ones that need nothing outside the test's own folders. */
+export const tableRows = rows.filter((r) => !(r.settings && r.settings.managed));
+/** Rows that need a managed-settings.json in the system folder. */
+export const managedRows = rows.filter((r) => r.settings && r.settings.managed);
+
+const groupsOf = (list) => {
   const out = new Map();
-  for (const r of rows) {
+  for (const r of list) {
     const key = JSON.stringify(r.settings);
     if (!out.has(key)) out.set(key, { settings: r.settings, rows: [] });
     out.get(key).rows.push(r);
   }
   return [...out.values()];
 };
+/** The groups of the main table, each with the settings every row of it shares. */
+export const groups = () => groupsOf(tableRows);
+/** The groups of the rows that need managed settings. */
+export const managedGroups = () => groupsOf(managedRows);
 
 // ---- who approves the call: the permission mode default, no allow rule for Bash -------------------------------------------------
 // `expect` is what `claude -p` did: "approved" (the call ran), "asked" (it needs a prompt, which -p cannot give: nothing ran) or
@@ -354,6 +402,7 @@ approve("approval-basic", P({}, { excludedCommands: ["gh *"] }), [
   ["curl -sS -m 10 -o /dev/null -w \"%{http_code}\" http://sandbox-doctor-probe.invalid/", "approved"],
 ]);
 approve("approval-off", { user: { sandbox: { excludedCommands: ["gh *"] } } }, [["mytool run", "asked"]]);
+approve("approval-off-explicit", { user: { sandbox: { enabled: false, autoAllowBashIfSandboxed: true } } }, [["mytool run", "asked"]]);
 approve("approval-noauto", P({}, { autoAllowBashIfSandboxed: false }), [["mytool run", "asked"]]);
 approve("approval-deny", P({ deny: ["Bash(docker *)"] }), [["docker ps", "denied"], ["mytool run", "approved"], ["mytool run && docker ps", "denied"]]);
 approve("approval-ask", P({ ask: ["Bash(git push *)"] }), [["git push origin main", "asked"], ["git fetch --all", "approved"]]);

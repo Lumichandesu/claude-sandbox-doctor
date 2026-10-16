@@ -2,10 +2,11 @@ name: e2e
 
 # The checks that run the real Claude Code with its Bash sandbox on: what the binary does with a write outside the project and a
 # connection to a host that is not allowed, which calls leave the sandbox because of sandbox.excludedCommands (the table of calls
-# that `why` is held to), what it does on a machine that lacks bubblewrap, the merged-usr layout, and that the plugin validates
-# and its skill hands the model the report. They cost nothing: Claude Code talks to a fake server on 127.0.0.1. Optional by
-# design: if the binary cannot be installed, the checks skip. Weekly, so a Claude Code release that changes how the sandbox
-# decides shows up here. The sandbox exists on Linux, WSL2 and macOS only, so there is no Windows job.
+# that `why` is held to), which spellings of an allowed domain match, what it does on a machine that lacks bubblewrap, the bwrap
+# command line and the merged-usr layout, managed settings, and that the plugin validates and its skill hands the model the
+# report. They cost nothing: Claude Code talks to a fake server on 127.0.0.1. Optional by design: if the binary cannot be
+# installed, the checks skip. Weekly, so a Claude Code release that changes how the sandbox decides shows up here. The sandbox
+# exists on Linux, WSL2 and macOS only, so there is no Windows job.
 on:
   push:
     branches: [main]
@@ -51,8 +52,8 @@ jobs:
         continue-on-error: true
       - run: claude --version
         continue-on-error: true
-      - name: The sandbox, the plugin and the host checks against the real binary
-        run: node --test test/e2e-sandbox.test.mjs test/e2e-plugin.test.mjs
+      - name: The sandbox, the keys, the bwrap command line, the merged-usr question and the plugin against the real binary
+        run: node --test test/e2e-sandbox.test.mjs test/e2e-keys.test.mjs test/e2e-bwrap.test.mjs test/e2e-plugin.test.mjs
         env:
           E2E_CLAUDE: claude
       - name: The table of calls against the real binary
@@ -60,6 +61,22 @@ jobs:
         run: node --test test/e2e-table.test.mjs
         env:
           E2E_CLAUDE: claude
+      - name: The table of domain entries against the real binary
+        if: ${{ !cancelled() }}
+        run: node --test test/e2e-domains.test.mjs
+        env:
+          E2E_CLAUDE: claude
+      - name: What claude doctor says about sandbox settings
+        if: ${{ !cancelled() }}
+        run: node --test test/e2e-settings.test.mjs
+        env:
+          E2E_CLAUDE: claude
+      - name: Managed settings (written to /etc/claude-code with sudo, and removed again)
+        if: ${{ !cancelled() }}
+        run: node --test test/e2e-managed.test.mjs
+        env:
+          E2E_CLAUDE: claude
+          CSD_E2E_MANAGED: "1"
       - name: check --live and check on this machine
         if: ${{ !cancelled() }}
         run: |
@@ -106,8 +123,8 @@ jobs:
         continue-on-error: true
       - run: claude --version
         continue-on-error: true
-      - name: The sandbox, the plugin and the host checks against the real binary
-        run: node --test test/e2e-sandbox.test.mjs test/e2e-plugin.test.mjs
+      - name: The sandbox, the keys and the plugin against the real binary
+        run: node --test test/e2e-sandbox.test.mjs test/e2e-keys.test.mjs test/e2e-bwrap.test.mjs test/e2e-plugin.test.mjs
         env:
           E2E_CLAUDE: claude
       - name: The table of calls against the real binary
@@ -115,6 +132,22 @@ jobs:
         run: node --test test/e2e-table.test.mjs
         env:
           E2E_CLAUDE: claude
+      - name: The table of domain entries against the real binary
+        if: ${{ !cancelled() }}
+        run: node --test test/e2e-domains.test.mjs
+        env:
+          E2E_CLAUDE: claude
+      - name: What claude doctor says about sandbox settings
+        if: ${{ !cancelled() }}
+        run: node --test test/e2e-settings.test.mjs
+        env:
+          E2E_CLAUDE: claude
+      - name: Managed settings (written to /Library/Application Support/ClaudeCode with sudo, and removed again)
+        if: ${{ !cancelled() }}
+        run: node --test test/e2e-managed.test.mjs
+        env:
+          E2E_CLAUDE: claude
+          CSD_E2E_MANAGED: "1"
       - name: check --live and check on this machine
         if: ${{ !cancelled() }}
         run: |

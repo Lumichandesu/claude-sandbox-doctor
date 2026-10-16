@@ -109,6 +109,16 @@ function containerKind(sys) {
 }
 
 /**
+ * The flags of the bubblewrap trial, in groups: the ones Claude Code puts on its own command line, in this order (test/e2e-bwrap
+ * records the command line of a real run and holds this list to it): a new session, a process that dies with its parent, no network,
+ * the host mounted read-only, a fresh /dev, new process and user namespaces, every capability dropped, a fresh /proc (the
+ * container's own /proc when enableWeakerNestedSandbox is on).
+ */
+export function trialGroups(weaker = false) {
+  return [["--new-session"], ["--die-with-parent"], ["--unshare-net"], ["--ro-bind", "/", "/"], ["--dev", "/dev"], ["--unshare-pid"], ["--unshare-user"], ["--cap-drop", "ALL"], weaker ? ["--bind", "/proc", "/proc"] : ["--proc", "/proc"]];
+}
+
+/**
  * The checks of this machine.
  *   sys       realSys() or a play-acting machine
  *   settings  { bwrapPath, socatPath, enableWeakerNestedSandbox } from the merged sandbox settings, when they are known
@@ -186,8 +196,7 @@ export function checkHost(sys, { settings = {}, light = false } = {}) {
   // the mounts and namespaces Claude Code asks bubblewrap for (read from its command line, 2.1.301): the host mounted read-only, a
   // new session, process, user and network namespace, every capability dropped, a fresh /proc (or the container's, when
   // enableWeakerNestedSandbox is on)
-  const weaker = settings.enableWeakerNestedSandbox === true;
-  const mountArgs = ["--new-session", "--die-with-parent", "--unshare-net", "--ro-bind", "/", "/", "--dev", "/dev", "--unshare-pid", "--unshare-user", "--cap-drop", "ALL", ...(weaker ? ["--bind", "/proc", "/proc"] : ["--proc", "/proc"]), "--", "/bin/bash", "-c", "echo sandbox-doctor-ok"];
+  const mountArgs = [...trialGroups(settings.enableWeakerNestedSandbox === true).flat(), "--", "/bin/bash", "-c", "echo sandbox-doctor-ok"];
   const shown = `bwrap ${mountArgs.join(" ")}`;
   const r = sys.exec(bw, mountArgs, { timeout: 15000 });
   let started = false;

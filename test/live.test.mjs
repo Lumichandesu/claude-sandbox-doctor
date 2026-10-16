@@ -67,6 +67,8 @@ test("findClaude: the path given, else the first claude on PATH, else a message"
   put(file, "x", 0o755);
   assert.deepEqual(findClaude(file, realSys()), { path: path.resolve(file) });
   assert.match(findClaude(path.join(dir, "nope"), realSys()).error, /does not exist/);
+  if (process.platform !== "win32") assert.deepEqual(findClaude("claude", realSys({ PATH: dir })), { path: file }, "a bare name is looked up on the PATH");
+  assert.match(findClaude("claude", realSys({ PATH: path.join(dir, "empty") })).error, /does not exist/);
   assert.deepEqual(findClaude(null, realSys({ PATH: dir })), { path: file });
   assert.match(findClaude(null, realSys({ PATH: path.join(dir, "empty") })).error, /claude was not found on PATH/);
 });
