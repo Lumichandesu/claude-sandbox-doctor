@@ -7,7 +7,7 @@ body:
     id: problem
     attributes:
       label: The problem
-      description: What are you trying to do with your MCP servers, and what gets in the way?
+      description: What are you trying to do with Claude Code's sandbox, and what gets in the way?
     validations:
       required: true
   - type: textarea

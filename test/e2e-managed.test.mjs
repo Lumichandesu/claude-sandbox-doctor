@@ -52,6 +52,17 @@ test("an admin-required sandbox ignores the network entries of a repository and 
   } finally { clearManaged(); }
 });
 
+test("permissions.defaultMode bypassPermissions in managed settings lets a host that is not allowed through, as the same setting in the user file does; strictAllowlist in the user file holds against it", { skip: SKIP, timeout: 300000 }, async (t) => {
+  try {
+    const run = (label, user) => runSession({ label, mode: null, user: { sandbox: { enabled: true }, ...user }, project: {}, programs: [], commands: [curl("managed-a.invalid")], setup: () => setManaged({ permissions: { defaultMode: "bypassPermissions" } }) });
+    const open = await run("managed-bypass", {});
+    const strict = await run("managed-bypass-strict", { sandbox: { enabled: true, network: { strictAllowlist: true } } });
+    t.diagnostic(`Claude Code ${claudeInfo().version}: managed defaultMode bypassPermissions -> ${JSON.stringify(open.calls[0].text.slice(0, 40))}; with strictAllowlist in the user file -> ${JSON.stringify(strict.calls[0].text.slice(0, 40))}`);
+    assert.equal(refused(open.calls[0].text, "managed-a.invalid"), false, "let through");
+    assert.equal(refused(strict.calls[0].text, "managed-a.invalid"), true, "refused with strictAllowlist");
+  } finally { clearManaged(); }
+});
+
 test("sandbox.bwrapPath in managed settings is used, and a relative one is dropped for the bwrap on the PATH", { skip: SKIP || (process.platform !== "linux" && "bubblewrap exists on Linux only"), timeout: 300000 }, async (t) => {
   const real = realSys().which("bwrap");
   const stand = (dir, name, tag) => put(path.join(dir, name), ["#!/bin/sh", `if [ -n "$CSD_ARGV" ]; then printf '%s\\0' "$@" > "$CSD_ARGV/${tag}-$$.argv"; fi`, `exec "${real}" "$@"`, ""].join("\n"), 0o755);

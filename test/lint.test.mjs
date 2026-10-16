@@ -49,6 +49,7 @@ const TABLE = [
   ["... with allowManagedDomainsOnly in managed settings", { user: { permissions: { defaultMode: "bypassPermissions" }, sandbox: { enabled: true, network: { allowedDomains: ["github.com"] } } }, managed: { sandbox: { network: { allowManagedDomainsOnly: true } } } }, "linux", []],
   ["... in another permission mode", { user: { permissions: { defaultMode: "acceptEdits" }, sandbox: { enabled: true, network: { allowedDomains: ["github.com"] } } } }, "linux", []],
   ["... with no allowedDomains to ignore", { user: { permissions: { defaultMode: "bypassPermissions" }, sandbox: { enabled: true } } }, "linux", []],
+  ["... in a project file, which Claude Code does not read the bypassPermissions mode from", { user: { sandbox: { enabled: true, network: { allowedDomains: ["github.com"] } } }, project: { permissions: { defaultMode: "bypassPermissions" } } }, "linux", []],
   ["... in managed settings, which a higher file than the user's decides", { user: { permissions: { defaultMode: "default" }, sandbox: { enabled: true, network: { allowedDomains: ["github.com"] } } }, managed: { permissions: { defaultMode: "bypassPermissions" } } }, "linux", ["warning domains-bypass"]],
   ["a denied domain with a scheme", S({ network: { deniedDomains: ["http://evil.test"] } }), "linux", ["warning domain-scheme"]],
   ["an empty domain, a domain with a space and one with characters a host name does not have", S({ network: { allowedDomains: ["", " github.com", "a_b!.com"] } }), "linux", ["warning domain-empty", "warning domain-space", "warning domain-chars"]],

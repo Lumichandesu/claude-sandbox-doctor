@@ -2,6 +2,8 @@
 
 What could come next. None of it is promised; all of it is open to contributors. Comment on an issue or start a [discussion](https://github.com/nrzz/claude-sandbox-doctor/discussions) before a large change.
 
-- A first step, to be written.
-- A second step, to be written.
-- A good first issue, to be written.
+- `lint`: an `allowedDomains` entry for a loopback or link-local address (`127.0.0.1`, `[::1]`, `169.254.169.254`) never lets a connection through, because the proxy refuses names that resolve only to local addresses (the documentation says so; the binary was not asked). This is the open good first issue: [#1](https://github.com/nrzz/claude-sandbox-doctor/issues/1).
+- `--settings <file>` for `show`, `why` and `lint`: the file that a launcher passes to Claude Code with `--settings` is a source this tool cannot see today, and a `--settings` that sets `allowUnsandboxedCommands: false` makes the sandbox admin-required. The loader needs one more source with the precedence the real binary gives it, and a table of rows to put to the binary.
+- WSL2 and other distributions: run the real-binary checks (`E2E_CLAUDE=claude node --test test/e2e-*.test.mjs`) on a WSL2 distribution, on Debian 13 with bubblewrap 0.12.0 (the setup of #99680), on Fedora with SELinux and on Arch, and record what differs. Nothing here was run on any of them; a pull request that adds the output of a run to "What was verified" helps more than code.
+- The other permission modes: the approval table runs in the default mode, and the network checks in the default and `bypassPermissions` modes. `acceptEdits`, `plan`, `dontAsk` and auto mode (which needs a classifier answer from the fake API) would each get a table, and `why` an option to name the mode.
+- `check`: say which of the helper's steps failed when Claude Code's `apply-seccomp` fails (#43454). It needs a machine where it fails, and a way to run the helper alone.
