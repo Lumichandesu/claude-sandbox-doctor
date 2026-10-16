@@ -109,10 +109,19 @@ for (const [situation, want] of Object.entries(SITUATIONS)) {
 }
 
 test("runLive leaves nothing behind: the throwaway folder is removed, and a run that is not a sandbox says what Claude Code said on stderr", async () => {
-  const before = fs.readdirSync(path.dirname(tmpDir("csd-probe-marker-"))).filter((n) => n.startsWith("csd-live-")).length;
-  const r = await runLive({ claude: fakeClaude(), sys: sysWith("unavailable"), timeout: 60000 });
-  assert.match(r.warnings[0], /Sandbox disabled: sandbox is enabled but dependencies are missing/);
-  assert.match(r.probes[1].evidence, /did not run it without asking \(.*Sandbox disabled/);
-  const after = fs.readdirSync(path.dirname(tmpDir("csd-probe-marker-"))).filter((n) => n.startsWith("csd-live-")).length;
-  assert.equal(after, before, "no csd-live-* folder is left in the temp folder");
+  // a temporary folder of its own for this test: other test processes (the run that counts the tests, for one) make csd-live-* folders in the shared one
+  const mine = tmpDir("csd-live-parent-");
+  const saved = { TMPDIR: process.env.TMPDIR, TEMP: process.env.TEMP, TMP: process.env.TMP };
+  Object.assign(process.env, { TMPDIR: mine, TEMP: mine, TMP: mine });
+  try {
+    const before = fs.readdirSync(mine).length;
+    const r = await runLive({ claude: fakeClaude(), sys: sysWith("unavailable"), timeout: 60000 });
+    assert.match(r.warnings[0], /Sandbox disabled: sandbox is enabled but dependencies are missing/);
+    assert.match(r.probes[1].evidence, /did not run it without asking \(.*Sandbox disabled/);
+    const after = fs.readdirSync(mine).filter((n) => n.startsWith("csd-live-"));
+    assert.equal(before, 0, "the folder was empty when the run started");
+    assert.deepEqual(after, [], "no csd-live-* folder is left in the temp folder");
+  } finally {
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
 });
