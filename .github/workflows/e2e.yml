@@ -105,7 +105,12 @@ jobs:
         continue-on-error: true
         run: |
           export HOME="$(mktemp -d)" npm_config_cache="$(mktemp -d)"
-          npx -y "github:nrzz/claude-sandbox-doctor#${{ github.sha }}" check --markdown
+          # GitHub serves the tarball of a commit that was pushed a minute ago only after a while; npm then falls back to a clone and stops
+          for attempt in 1 2 3 4; do
+            npx -y "github:nrzz/claude-sandbox-doctor#${{ github.sha }}" check --markdown && exit 0
+            sleep 30
+          done
+          exit 1
 
   linux-without:
     name: ubuntu without bubblewrap and socat
@@ -182,4 +187,9 @@ jobs:
         continue-on-error: true
         run: |
           export HOME="$(mktemp -d)" npm_config_cache="$(mktemp -d)"
-          npx -y "github:nrzz/claude-sandbox-doctor#${{ github.sha }}" check --markdown
+          # GitHub serves the tarball of a commit that was pushed a minute ago only after a while; npm then falls back to a clone and stops
+          for attempt in 1 2 3 4; do
+            npx -y "github:nrzz/claude-sandbox-doctor#${{ github.sha }}" check --markdown && exit 0
+            sleep 30
+          done
+          exit 1
