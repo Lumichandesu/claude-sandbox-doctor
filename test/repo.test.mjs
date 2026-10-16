@@ -1,27 +1,13 @@
 // The package itself: what it says it is, what it imports, which Node it needs, which files may start a process or open a
 // socket, that the plugin's skill calls the tool with options the tool has, that the icon is a real PNG of the right size, that
 // the workflows and the README have what they promise, and that the version is the same everywhere.
-import { ROOT } from "./helpers.mjs";
+import { ROOT, exists, json, read, sources, walk } from "./helpers.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { VERSION } from "../src/version.mjs";
-
-// a checkout on Windows may turn line feeds into CRLF
-const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8").replace(/\r\n/g, "\n");
-const json = (rel) => JSON.parse(read(rel));
-const exists = (rel) => fs.existsSync(path.join(ROOT, rel));
-const walk = (dir, ext, out = []) => {
-  for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
-    const rel = path.join(dir, e.name);
-    if (e.isDirectory()) walk(rel, ext, out);
-    else if (e.name.endsWith(ext)) out.push(rel.split(path.sep).join("/"));
-  }
-  return out;
-};
-const sources = () => [...walk("src", ".mjs"), ...walk("bin", ".mjs")];
 
 const pkg = json("package.json");
 const plugin = json(".claude-plugin/plugin.json");

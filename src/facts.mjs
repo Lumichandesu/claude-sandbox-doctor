@@ -46,7 +46,7 @@ export const SANDBOX_KEYS = {
   "network.allowedDomains": { type: "strings", scope: "any", list: true },
   "network.deniedDomains": { type: "strings", scope: "any", list: true },
   "network.allowManagedDomainsOnly": { type: "boolean", scope: "managed", verified: true },
-  "network.strictAllowlist": { type: "boolean", scope: "user" },
+  "network.strictAllowlist": { type: "boolean", scope: "user", verified: true },
   "network.allowUnixSockets": { type: "strings", scope: "any", list: true, platforms: ["macos"] },
   "network.allowAllUnixSockets": { type: "boolean", scope: "any" },
   "network.allowLocalBinding": { type: "boolean", scope: "any", platforms: ["macos"] },

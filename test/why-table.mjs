@@ -400,6 +400,9 @@ approve("approval-basic", P({}, { excludedCommands: ["gh *"] }), [
   ["curl -sS -m 10 -o /dev/null http://sandbox-doctor-probe.invalid/", "approved"],
   ["curl -sS -m 10 -o /dev/null -w \"http=%{http_code}\n\" http://sandbox-doctor-probe.invalid/", "asked"],
   ["curl -sS -m 10 -o /dev/null -w \"%{http_code}\" http://sandbox-doctor-probe.invalid/", "approved"],
+  ["cat < /dev/tcp/127.0.0.1/9", "asked"],
+  ["exec 3<>/dev/tcp/127.0.0.1/9", "asked"],
+  ["bash -c \"echo hi > /dev/tcp/127.0.0.1/9\"", "approved"],
 ]);
 approve("approval-off", { user: { sandbox: { excludedCommands: ["gh *"] } } }, [["mytool run", "asked"]]);
 approve("approval-off-explicit", { user: { sandbox: { enabled: false, autoAllowBashIfSandboxed: true } } }, [["mytool run", "asked"]]);

@@ -100,3 +100,21 @@ export async function run(args, w, { cwd, env = {}, now = NOW, platform, sys, ru
   });
   return { code, out, err, all: out + err, json: () => JSON.parse(out) };
 }
+
+// ---- the repository's own files, for the tests that hold the package and the README to the code -----------------------------------
+
+/** A file of the repository as text with LF line ends (a checkout on Windows may turn line feeds into CRLF). */
+export const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8").replace(/\r\n/g, "\n");
+export const json = (rel) => JSON.parse(read(rel));
+export const exists = (rel) => fs.existsSync(path.join(ROOT, rel));
+/** The files under a folder of the repository whose names end with ext, as paths with forward slashes. */
+export function walk(dir, ext, out = []) {
+  for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+    const rel = path.join(dir, e.name);
+    if (e.isDirectory()) walk(rel, ext, out);
+    else if (e.name.endsWith(ext)) out.push(rel.split(path.sep).join("/"));
+  }
+  return out;
+}
+/** The code that ships: src/ and bin/. */
+export const sources = () => [...walk("src", ".mjs"), ...walk("bin", ".mjs")];

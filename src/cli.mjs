@@ -4,7 +4,7 @@
 import os from "node:os";
 import path from "node:path";
 import { buildCheckModel, buildLintModel, buildShowModel, buildWhyModel } from "./commands.mjs";
-import { markdownCheck, markdownLint, palette, renderCheck, renderLint, renderShow, renderWhy, strip } from "./render.mjs";
+import { hideSecrets, markdownCheck, markdownLint, palette, renderCheck, renderLint, renderShow, renderWhy, strip } from "./render.mjs";
 import { VERSION } from "./version.mjs";
 
 const HELP = `claude-sandbox-doctor ${VERSION}
@@ -140,7 +140,8 @@ export async function main(argv, io = {}) {
 
   const color = !!stdout.isTTY && !env.NO_COLOR && !o.noColor;
   const common = { env, home, platform, managed: io.managed, cwd, sys: io.sys };
-  const emit = (model, text) => stdout.write(o.json ? `${JSON.stringify(strip(model), null, 2)}\n` : text);
+  // the text reports hide what looks like a credential in a quoted entry; the JSON documents are data and keep it
+  const emit = (model, text) => stdout.write(o.json ? `${JSON.stringify(strip(model), null, 2)}\n` : hideSecrets(text));
 
   try {
     const allowed = { check: ["--live", "--claude", "--markdown"], show: [], why: ["--retry"], lint: ["--markdown"] }[o.command];

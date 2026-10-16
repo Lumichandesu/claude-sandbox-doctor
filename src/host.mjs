@@ -134,7 +134,7 @@ export function checkHost(sys, { settings = {}, light = false } = {}) {
   if (platform.id === "windows" || platform.id === "wsl1" || platform.id === "other") {
     push(item("platform", "info", platform.label, { detail: platform.detail }));
     push(item("no-sandbox", "ok", platform.id === "wsl1" ? "No Bash sandbox: Claude Code's sandbox needs WSL2, and this is WSL1" : platform.id === "windows" ? "No Bash sandbox on Windows: Claude Code runs Bash commands without one" : `No Bash sandbox is known for ${platform.label}`, {
-      detail: platform.id === "windows" ? "The sandbox runs on Linux, WSL2 and macOS. With sandbox.enabled true on Windows, Claude Code 2.1.299 printed \"Sandbox disabled\" and ran commands without it; with failIfUnavailable true it refused to start (README: What was verified)." : "The sandbox runs on Linux, WSL2 and macOS.",
+      detail: platform.id === "windows" ? "The sandbox runs on Linux, WSL2 and macOS. With sandbox.enabled true on Windows, Claude Code 2.1.295 and 2.1.299 printed \"Sandbox disabled\" and ran commands without it; with failIfUnavailable true it refused to start (README: What was verified)." : "The sandbox runs on Linux, WSL2 and macOS.",
       fix: platform.id === "wsl1" ? "Upgrade the distribution to WSL2 (`wsl --set-version <distro> 2`) to get the sandbox." : "To use the sandbox on a Windows machine, run Claude Code inside a WSL2 distribution.",
     }));
     out.summary = "There is no Bash sandbox on this system. Nothing to check.";
@@ -189,7 +189,7 @@ export function checkHost(sys, { settings = {}, light = false } = {}) {
 
   if (!bw || light) {
     push(item("namespaces", light ? "info" : "skip", `user namespaces: ${nsDetail || "no sysctl is readable"}`, { detail: light ? "" : "not tried: bubblewrap is missing" }));
-    out.summary = out.ok ? "Bubblewrap and socat are there." : `Missing: ${out.missing.join(", ")}. The sandbox cannot start until they are installed.`;
+    out.summary = out.ok ? "Bubblewrap and socat are there." : `Missing: ${out.missing.join(", ")}. The sandbox cannot start until they are installed. With sandbox.enabled on, Claude Code then runs commands without it and prints "Sandbox disabled", or refuses to start when sandbox.failIfUnavailable is true.`;
     return out;
   }
 

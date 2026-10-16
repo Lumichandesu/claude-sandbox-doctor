@@ -25,6 +25,18 @@ export function wrap(text, width) {
 }
 const indent = (text, first, rest, width = 100) => wrap(text, width - first.length).map((l, i) => `${i === 0 ? first : rest}${l}`);
 const clip = (s, n) => { const t = String(s).replace(/\s+/g, " "); return t.length > n ? `${t.slice(0, n - 3)}...` : t; };
+
+/**
+ * Text that goes to the model (the --markdown reports) quotes settings entries. Hide what looks like a credential in them: the
+ * value of a NAME=value whose name has KEY, TOKEN, SECRET, PASSWORD, CREDENTIAL or AUTH in it, a Bearer or Basic header value, and
+ * the common token shapes (sk-..., ghp_..., github_pat_..., AKIA...).
+ */
+export function hideSecrets(text) {
+  return String(text)
+    .replace(/\b([A-Za-z_][A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|CREDENTIALS|AUTH)[A-Za-z0-9_]*)=("[^"]*"|'[^']*'|\S+)/gi, "$1=<hidden>")
+    .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/g, "$1 <hidden>")
+    .replace(/\b(?:sk-[A-Za-z0-9_-]{10,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b/g, "<hidden>");
+}
 const where = (s) => (s ? `${s.display}${s.line ? `:${s.line}` : ""}` : "");
 const q = (v) => (typeof v === "string" ? JSON.stringify(v) : JSON.stringify(v));
 
@@ -77,14 +89,14 @@ export function renderCheck(m, { color = false } = {}) {
 
 /** The short form the skill hands to Claude: at most 9 lines, and it never exits 1. */
 export function markdownCheck(m) {
-  const out = [];
-  out.push(`## sandbox-doctor check: ${m.platform.label}`);
+  const lines = [];
   for (const it of m.items) {
     if (it.status === "info" || it.status === "skip") continue;
-    out.push(`- ${it.status.toUpperCase()} ${clip(it.title, 160)}${it.status !== "ok" && it.fix ? ` Fix: ${clip(it.fix, 200)}` : ""}`);
+    lines.push(`- ${it.status.toUpperCase()} ${clip(it.title, 160)}${it.status !== "ok" && it.fix ? ` Fix: ${clip(it.fix, 200)}` : ""}`);
   }
-  out.push(m.summary);
-  return `${out.slice(0, 9).join("\n")}\n`;
+  // the heading and the summary always stay; items beyond seven are left out
+  const out = [`## sandbox-doctor check: ${m.platform.label}`, ...lines.slice(0, 7), m.summary];
+  return `${hideSecrets(out.join("\n"))}\n`;
 }
 
 // ------------------------------------------------------------------------------------------------------------
@@ -239,7 +251,8 @@ export function markdownLint(m) {
   const show = m.findings.filter((f) => f.severity !== "note");
   for (const f of show.slice(0, 12)) {
     const line = `- ${f.severity.toUpperCase()} \`${f.id}\` ${f.display}${f.line ? `:${f.line}` : ""} \`${f.keyPath || ""}\`: ${f.message}${f.fix ? ` Fix: ${f.fix}` : ""}`.replace(/\s+/g, " ");
-    out.push(line.length > 300 ? `${line.slice(0, 297)}...` : line);
+    const safe = hideSecrets(line);
+    out.push(safe.length > 300 ? `${safe.slice(0, 297)}...` : safe);
   }
   if (show.length > 12) out.push(`- ... and ${show.length - 12} more (run \`claude-sandbox-doctor lint\`)`);
   if (!show.length) out.push("- No error and no warning.");

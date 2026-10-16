@@ -144,7 +144,7 @@ test("RULES: every finding the table produced is a rule with the severity and th
     const rule = RULES[f.id];
     assert.ok(rule, `${f.id} is in RULES`);
     assert.equal(f.severity, rule.severity, `${f.id}: severity`);
-    if (f.id !== "key-scope") assert.equal(f.basis, rule.basis, `${f.id}: basis`);
+    if (rule.basis !== "mixed") assert.equal(f.basis, rule.basis, `${f.id}: basis`);
     assert.ok(["binary", "docs"].includes(f.basis), `${f.id}: basis ${f.basis}`);
   }
   assert.deepEqual(Object.keys(RULES).filter((id) => !ids.has(id)), [], "a rule that no row of the table triggers");

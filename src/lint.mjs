@@ -47,13 +47,13 @@ export function domainProblem(raw) {
 
 /**
  * Every rule: how serious it is, where its claim comes from, and what it finds. basis "binary" means the claim was put to the real
- * Claude Code in CI (the test named after the rule's group in test/e2e-*.test.mjs; the README says which); "docs" means the
- * documentation says so and the binary was not asked. The README's table of rules is held to this one.
+ * Claude Code in CI (the README says which tests); "docs" means the documentation says so and the binary was not asked; "mixed"
+ * (key-scope) means each finding says which of the two it is. The README's table of rules is held to this one.
  */
 export const RULES = {
   "file-ignored": { severity: "error", basis: "binary", what: "a settings file that Claude Code drops whole: a comment, a trailing comma, or a value of the wrong type in its sandbox block" },
   "unknown-key": { severity: "warning", basis: "binary", what: "a key the sandbox block does not have (a typo), which Claude Code ignores without a word" },
-  "key-scope": { severity: "warning", basis: "binary", what: "a key that only managed settings (or only user and managed settings) may set, in a file that may not" },
+  "key-scope": { severity: "warning", basis: "mixed", what: "a key that only managed settings (or only user and managed settings) may set, in a file that may not (binary for bwrapPath, socatPath, enabledPlatforms, allowManagedDomainsOnly and strictAllowlist, docs for the other keys)" },
   "relative-path": { severity: "warning", basis: "binary", what: "a relative bwrapPath or socatPath in managed settings, which Claude Code drops" },
   "platform-name": { severity: "warning", basis: "binary", what: "an enabledPlatforms name that is none of macos, linux, wsl and windows" },
   "protected-path": { severity: "warning", basis: "binary", what: "an allowWrite entry for a path the sandbox keeps write-protected" },

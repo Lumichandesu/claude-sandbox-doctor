@@ -19,17 +19,20 @@ const ids = async (files) => {
   return j.findings.map((f) => f.id);
 };
 
-test("a user file with a comment or a trailing comma is ignored whole: the sandbox it switches on stays off", { skip: SKIP, timeout: 300000 }, async () => {
+test("a user file with a comment, a trailing comma or a value of the wrong type in its sandbox block is ignored whole: the sandbox it switches on stays off", { skip: SKIP, timeout: 300000 }, async () => {
   const commented = '{\n  // the sandbox\n  "sandbox": { "enabled": true }\n}\n';
   const trailing = '{ "sandbox": { "enabled": true }, }\n';
   const a = await runSession({ label: "comment", user: commented, project: {}, commands: ["mytool run"] });
   const b = await runSession({ label: "trailing", user: trailing, project: {}, commands: ["mytool run"] });
+  const wrongType = await runSession({ label: "wrong-type", user: { sandbox: { enabled: true, excludedCommands: "mytool" } }, project: {}, commands: ["mytool run"] });
   const c = await runSession({ label: "plain", user: '{ "sandbox": { "enabled": true } }\n', project: {}, commands: ["mytool run"] });
   assert.deepEqual(a.places, ["unsandboxed"], "a comment: the file is ignored");
   assert.deepEqual(b.places, ["unsandboxed"], "a trailing comma: the file is ignored");
-  assert.deepEqual(c.places, ["sandboxed"], "the same without either: the sandbox is on");
+  assert.deepEqual(wrongType.places, ["unsandboxed"], "excludedCommands as a string: the file is ignored, and so is its enabled");
+  assert.deepEqual(c.places, ["sandboxed"], "the same without any of them: the sandbox is on");
   assert.ok((await ids({ user: commented })).includes("file-ignored"));
   assert.ok((await ids({ user: trailing })).includes("file-ignored"));
+  assert.ok((await ids({ user: { sandbox: { enabled: true, excludedCommands: "mytool" } } })).includes("file-ignored"));
 });
 
 test("a key that is none does nothing, with no warning: excludedCommand for excludedCommands", { skip: SKIP, timeout: 300000 }, async () => {
