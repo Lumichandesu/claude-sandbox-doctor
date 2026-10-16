@@ -38,7 +38,7 @@ const underTmp = (p) => path.resolve(p).toLowerCase().startsWith(fs.realpathSync
 const configDirOf = (e) => e.CLAUDE_CONFIG_DIR || path.join((process.platform === "win32" ? e.USERPROFILE || e.HOME : e.HOME) || "", ".claude");
 
 const asText = (v) => (typeof v === "string" ? v : `${JSON.stringify(v, null, 2)}\n`);
-export const put = (file, v) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, asText(v)); return file; };
+export const put = (file, v, mode) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, asText(v)); if (mode) fs.chmodSync(file, mode); return file; };
 export const fwd = (p) => String(p).split(path.sep).join("/");
 
 /**
