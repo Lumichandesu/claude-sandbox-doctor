@@ -82,6 +82,21 @@ jobs:
         run: |
           node bin/claude-sandbox-doctor.mjs check || true
           node bin/claude-sandbox-doctor.mjs check --live || true
+      - name: The examples of the README (examples/shop copied to ~/shop, no user settings)
+        if: ${{ !cancelled() }}
+        run: |
+          cp -r examples/shop "$HOME/shop"
+          run() { echo; echo "=== claude-sandbox-doctor $*"; node bin/claude-sandbox-doctor.mjs "$@"; echo "exit=$?"; }
+          run show --project "$HOME/shop" || true
+          run lint --project "$HOME/shop" || true
+          run lint --project "$HOME/shop" --markdown || true
+          run check --markdown || true
+          run why "docker compose up -d" --project "$HOME/shop" || true
+          run why "docker ps" --project "$HOME/shop" || true
+          run why "cd infra && terraform plan" --project "$HOME/shop" || true
+          run why "npm run build > build.log" --project "$HOME/shop" || true
+          run why "git push origin main" --project "$HOME/shop" --retry || true
+          run why "docker ps" --project "$HOME/shop" --json || true
 
   linux-without:
     name: ubuntu without bubblewrap and socat

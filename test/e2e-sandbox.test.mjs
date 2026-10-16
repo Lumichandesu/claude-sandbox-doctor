@@ -49,6 +49,8 @@ test("a connection to a host that is not in allowedDomains is refused by the san
   const open = await run("net-open", "default", { allowedDomains: ["probe-a.invalid"] });
   const bypass = await run("net-bypass", "bypassPermissions");
   const bypassManaged = await run("net-bypass-denied", "bypassPermissions", { deniedDomains: ["probe-a.invalid"] });
+  const strictUser = await run("net-strict-user", "bypassPermissions", { strictAllowlist: true });
+  const strictProject = await runSession({ label: "net-strict-project", mode: "bypassPermissions", user: { sandbox: { enabled: true } }, project: { sandbox: { network: { strictAllowlist: true } } }, programs: [], commands: [curl("probe-a.invalid")] });
   const refused = closed.calls[0].text;
   assert.ok(refused.includes("403"), refused);
   assert.ok(refused.includes("network-outbound probe-a.invalid:80"), refused);
@@ -56,8 +58,10 @@ test("a connection to a host that is not in allowedDomains is refused by the san
   assert.ok(!open.calls[0].text.includes("network-outbound"), open.calls[0].text);
   assert.ok(!bypass.calls[0].text.includes("403"), `bypassPermissions: ${bypass.calls[0].text}`);
   assert.ok(bypassManaged.calls[0].text.includes("403"), `a deniedDomains entry holds in bypassPermissions: ${bypassManaged.calls[0].text}`);
+  assert.ok(strictUser.calls[0].text.includes("403"), `strictAllowlist in a user file holds in bypassPermissions: ${strictUser.calls[0].text}`);
+  assert.ok(!strictProject.calls[0].text.includes("403"), `strictAllowlist in a project file does nothing: ${strictProject.calls[0].text}`);
   const one = (r) => JSON.stringify(r.calls[0].text.replace(/\s+/g, " ").slice(0, 120));
-  t.diagnostic(`Claude Code ${claudeInfo().version}: default mode, host not listed -> ${one(closed)}; listed -> ${one(open)}; bypassPermissions, host not listed -> ${one(bypass)}; denied -> ${one(bypassManaged)}`);
+  t.diagnostic(`Claude Code ${claudeInfo().version}: default mode, host not listed -> ${one(closed)}; listed -> ${one(open)}; bypassPermissions, host not listed -> ${one(bypass)}; denied -> ${one(bypassManaged)}; strictAllowlist in the user file -> ${one(strictUser)}; in the project file -> ${one(strictProject)}`);
 });
 
 test("check agrees with the binary: the sandbox can start here, and check --live finds the command inside the sandbox, the write blocked and the connection refused", { skip: SKIP, timeout: 300000 }, async (t) => {
