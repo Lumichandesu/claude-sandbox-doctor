@@ -1,0 +1,15 @@
+{
+  "name": "sandbox-doctor",
+  "displayName": "Sandbox Doctor",
+  "version": "1.0.0",
+  "description": "Whether Claude Code's Bash sandbox can work on this machine, and which sandbox settings can never take effect. One user-only skill: /sandbox-doctor:check.",
+  "author": { "name": "Naresh Prabu" },
+  "homepage": "https://github.com/nrzz/claude-sandbox-doctor",
+  "repository": "https://github.com/nrzz/claude-sandbox-doctor",
+  "documentationUrl": "https://github.com/nrzz/claude-sandbox-doctor#readme",
+  "supportUrl": "https://github.com/nrzz/claude-sandbox-doctor/issues",
+  "privacyPolicyUrl": "https://github.com/nrzz/claude-sandbox-doctor#privacy",
+  "termsOfServiceUrl": "https://github.com/nrzz/claude-sandbox-doctor/blob/main/LICENSE",
+  "license": "MIT",
+  "keywords": ["sandbox", "bubblewrap", "seatbelt", "security", "network", "permissions"]
+}

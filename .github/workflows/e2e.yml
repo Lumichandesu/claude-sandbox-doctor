@@ -1,0 +1,61 @@
+name: e2e
+
+# The checks that run the real Claude Code with its Bash sandbox on: what the binary does with a write outside the project and a
+# connection to a host that is not allowed, which calls leave the sandbox because of sandbox.excludedCommands (the table of
+# commands that `why` is held to), what it does with the sandbox on a machine that lacks bubblewrap, and that the plugin
+# validates and its skill hands the model the report. They cost nothing: Claude Code talks to a fake server on 127.0.0.1.
+# Optional by design: if the binary cannot be installed, the checks skip. Weekly, so a Claude Code release that changes how the
+# sandbox decides shows up here. The sandbox exists on Linux and macOS only, so there is no Windows job.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      claude_version:
+        description: "Version of @anthropic-ai/claude-code to install (default: the newest)"
+        required: false
+        default: "latest"
+
+jobs:
+  linux:
+    name: ubuntu with bubblewrap and socat
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install bubblewrap and socat
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap socat
+      - name: Install the Claude Code CLI (the checks skip if this fails)
+        run: npm install -g @anthropic-ai/claude-code@${{ inputs.claude_version || 'latest' }}
+        continue-on-error: true
+      - run: claude --version
+        continue-on-error: true
+      - name: The sandbox, the table of commands and the plugin against the real binary
+        run: node --test test/e2e-claude.test.mjs
+        env:
+          E2E_CLAUDE: claude
+
+  macos:
+    name: macos with Seatbelt
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install the Claude Code CLI (the checks skip if this fails)
+        run: npm install -g @anthropic-ai/claude-code@${{ inputs.claude_version || 'latest' }}
+        continue-on-error: true
+      - run: claude --version
+        continue-on-error: true
+      - name: The sandbox, the table of commands and the plugin against the real binary
+        run: node --test test/e2e-claude.test.mjs
+        env:
+          E2E_CLAUDE: claude
