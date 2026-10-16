@@ -45,6 +45,44 @@ export function domainProblem(raw) {
   return null;
 }
 
+/** Whether an allowed domain is an address the sandbox proxy refuses as local. */
+function isLocalAllowedAddress(raw) {
+  const bracket = /^\[([^\]]*)\](?::[1-9][0-9]{0,4})?$/.exec(raw);
+  let host = bracket ? bracket[1] : raw;
+  if (!bracket && (raw.match(/:/g) || []).length === 1) host = raw.slice(0, raw.indexOf(":"));
+
+  const ipv4 = /^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$/.exec(host);
+  if (ipv4) {
+    const octets = ipv4.slice(1).map(Number);
+    if (octets.some((octet) => octet > 255)) return false;
+    const [first, second] = octets;
+    return first === 127 || (first === 169 && second === 254);
+  }
+
+  let ipv6 = host.toLowerCase();
+  const ipv4Tail = /([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})$/.exec(ipv6);
+  if (ipv4Tail) {
+    const octets = /^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$/.exec(ipv4Tail[1]).slice(1).map(Number);
+    if (octets.some((octet) => octet > 255)) return false;
+    const tail = [((octets[0] << 8) | octets[1]).toString(16), ((octets[2] << 8) | octets[3]).toString(16)].join(":");
+    ipv6 = `${ipv6.slice(0, -ipv4Tail[1].length)}${tail}`;
+  }
+
+  const parts = ipv6.split("::");
+  if (parts.length > 2) return false;
+  const left = parts[0] ? parts[0].split(":") : [];
+  const right = parts[1] ? parts[1].split(":") : [];
+  const zeroes = 8 - left.length - right.length;
+  if (parts.length === 1 ? zeroes !== 0 : zeroes < 1) return false;
+  const groups = [...left, ...Array(zeroes).fill("0"), ...right];
+  if (groups.length !== 8 || groups.some((word) => !/^[0-9a-f]{1,4}$/.test(word))) return false;
+  const words = groups.map((word) => Number.parseInt(word, 16));
+
+  const loopback = words.slice(0, 7).every((word) => word === 0) && words[7] === 1;
+  const linkLocal = (words[0] & 0xffc0) === 0xfe80;
+  return loopback || linkLocal;
+}
+
 /**
  * Every rule: how serious it is, where its claim comes from, and what it finds. basis "binary" means the claim was put to the real
  * Claude Code in CI (the README says which tests); "docs" means the documentation says so and the binary was not asked; "mixed"
@@ -64,6 +102,7 @@ export const RULES = {
   "domain-path": { severity: "warning", basis: "binary", what: "a domain entry with a path, a query or a user name in it" },
   "domain-port": { severity: "warning", basis: "binary", what: "a domain entry whose port is not 1 to 65535 without a leading zero" },
   "domain-ipv6": { severity: "warning", basis: "binary", what: "an IPv6 domain entry without brackets, which claude doctor calls unreliable" },
+  "domain-local": { severity: "warning", basis: "docs", what: "an allowedDomains entry for a loopback or link-local address that the sandbox proxy refuses" },
   "domain-wildcard": { severity: "warning", basis: "binary", what: "a domain entry with a * that is not the whole first label" },
   "domain-chars": { severity: "warning", basis: "binary", what: "a domain entry with characters a host name does not have" },
   "wildcard-apex": { severity: "note", basis: "binary", what: "*.example.com without example.com, which the wildcard does not match" },
@@ -184,6 +223,7 @@ export function lintSettings(settings, { host, merged } = {}) {
       e.items.forEach((it) => {
         const p = domainProblem(it.value);
         if (p) add({ id: p.code, severity: "warning", scope: f.scope, file: f.path, display: f.display, line: it.line, keyPath: key, effect: "entry", message: `${JSON.stringify(it.value)} ${p.text}.`, fix: p.fix });
+        else if (key === "network.allowedDomains" && isLocalAllowedAddress(it.value)) add({ id: "domain-local", severity: "warning", scope: f.scope, file: f.path, display: f.display, line: it.line, keyPath: key, effect: "entry", message: `${JSON.stringify(it.value)} is a loopback or link-local address. Claude Code's sandbox proxy refuses connections to local addresses even when the host is allowlisted.`, fix: "Use localhost or *.localhost for a local service, or allow a host name that resolves to an address reachable from outside this machine." });
         else if (typeof it.value === "string" && /^\*\./.test(it.value)) {
           const apex = it.value.slice(2).replace(/:\d+$/, "");
           const all = (e.items || []).map((x) => x.value);
