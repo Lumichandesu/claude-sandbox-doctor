@@ -83,7 +83,7 @@ export function runCli(args, { cwd, env, input, timeout = 120000 } = {}) {
 }
 
 /** Runs main() in this process and captures what it prints. */
-export async function run(args, w, { cwd, env = {}, now = NOW, platform, host } = {}) {
+export async function run(args, w, { cwd, env = {}, now = NOW, platform, sys, runLive } = {}) {
   let out = "";
   let err = "";
   const code = await main(args, {
@@ -92,7 +92,8 @@ export async function run(args, w, { cwd, env = {}, now = NOW, platform, host } 
     home: w.home,
     managed: w.managedDir,
     platform,
-    host,
+    sys,
+    runLive,
     now,
     stdout: { write: (s) => { out += s; return true; } },
     stderr: { write: (s) => { err += s; return true; } },

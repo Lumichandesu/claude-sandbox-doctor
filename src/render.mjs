@@ -33,7 +33,7 @@ export function strip(model) {
   return JSON.parse(JSON.stringify(model, (key, value) => (key === "parsed" || key === "analysis" ? undefined : value)));
 }
 
-const STATUS = { ok: "ok  ", fail: "FAIL", warn: "warn", info: "    ", skip: "skip" };
+const STATUS = { ok: "ok  ", fail: "FAIL", warn: "warn", info: "info", skip: "skip" };
 
 // ------------------------------------------------------------------------------------------------------------
 // check
@@ -43,10 +43,12 @@ export function renderCheck(m, { color = false } = {}) {
   const p = palette(color);
   const out = [];
   out.push(`${p.bold(`claude-sandbox-doctor ${VERSION}`)}  can the Bash sandbox work here`);
-  out.push(`system    ${m.platform.label}`);
+  const kernel = (m.items.find((i) => i.id === "platform") || {}).detail;
+  out.push(`system    ${m.platform.label}${kernel ? `  (${kernel})` : ""}`);
   out.push("");
   const tag = (s) => (s === "fail" ? p.red(STATUS[s]) : s === "warn" ? p.yellow(STATUS[s]) : s === "ok" ? p.green(STATUS[s]) : p.dim(STATUS[s]));
   for (const it of m.items) {
+    if (it.id === "platform") continue; // the system line says it
     out.push(...indent(it.title, `  ${tag(it.status)}  `, "        "));
     if (it.detail) out.push(...indent(it.detail, "          ", "          ").map((l) => p.dim(l)));
     if (it.fix && it.status !== "ok") out.push(...indent(`fix: ${it.fix}`, "          ", "          "));

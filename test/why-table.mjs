@@ -340,7 +340,6 @@ function approve(group, settings, list) {
 }
 const P = (perm, sandbox = {}) => ({ user: { sandbox: { enabled: true, ...sandbox }, permissions: perm } });
 approve("approval-basic", P({}, { excludedCommands: ["gh *"] }), [
-  ["docker ps", "approved"],
   ["mytool run", "approved"],
   ["mytool run > out.txt", "approved"],
   ["gh pr list", "asked"],
@@ -349,16 +348,17 @@ approve("approval-basic", P({}, { excludedCommands: ["gh *"] }), [
   ["eval \"mytool run\"", "asked"],
   ["cd sub && mytool run && cd ..", "approved"],
   ["mytool run && gh pr list", "approved"],
+  ["docker ps", "approved"], // docker ps only reads: Claude Code passes it with or without a sandbox
   ["curl -sS -m 10 -o /dev/null http://sandbox-doctor-probe.invalid/", "approved"],
   ["curl -sS -m 10 -o /dev/null -w \"http=%{http_code}\n\" http://sandbox-doctor-probe.invalid/", "asked"],
   ["curl -sS -m 10 -o /dev/null -w \"%{http_code}\" http://sandbox-doctor-probe.invalid/", "approved"],
 ]);
-approve("approval-off", { user: { sandbox: { excludedCommands: ["gh *"] } } }, [["docker ps", "asked"]]);
-approve("approval-noauto", P({}, { autoAllowBashIfSandboxed: false }), [["docker ps", "asked"]]);
+approve("approval-off", { user: { sandbox: { excludedCommands: ["gh *"] } } }, [["mytool run", "asked"]]);
+approve("approval-noauto", P({}, { autoAllowBashIfSandboxed: false }), [["mytool run", "asked"]]);
 approve("approval-deny", P({ deny: ["Bash(docker *)"] }), [["docker ps", "denied"], ["mytool run", "approved"], ["mytool run && docker ps", "denied"]]);
-approve("approval-ask", P({ ask: ["Bash(git push *)"] }), [["git push origin main", "asked"], ["git status", "approved"]]);
-approve("approval-ask-bare", P({ ask: ["Bash"] }, { excludedCommands: ["gh *"] }), [["docker ps", "approved"], ["gh pr list", "asked"]]);
-approve("approval-allow", P({ allow: ["Bash(gh *)"] }, { excludedCommands: ["gh *"] }), [["gh pr list", "approved"], ["docker ps", "approved"]]);
+approve("approval-ask", P({ ask: ["Bash(git push *)"] }), [["git push origin main", "asked"], ["git fetch --all", "approved"]]);
+approve("approval-ask-bare", P({ ask: ["Bash"] }, { excludedCommands: ["gh *"] }), [["mytool run", "approved"], ["gh pr list", "asked"]]);
+approve("approval-allow", P({ allow: ["Bash(gh *)"] }, { excludedCommands: ["gh *"] }), [["gh pr list", "approved"], ["mytool run", "approved"]]);
 
 export const approvalGroups = () => {
   const out = new Map();

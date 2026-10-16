@@ -161,7 +161,7 @@ export function mergeSandbox(settings, { platform = "linux" } = {}) {
   if (adminRequired) notes.push(`the sandbox is admin-required (${adminReasons.join("; ")}): the settings that loosen it are taken only from managed settings, --settings and the user's own file`);
   if (winnerUnsandboxed === true && strictBy.length) notes.push("allowUnsandboxedCommands is true in a repository's file, and false in user or managed settings, which wins");
 
-  return { present: files.some((f) => f.view && f.view.sandbox), files: files.map((f) => ({ scope: f.scope, label: f.label, display: f.display, path: f.path, rank: f.rank, ignored: f.ignored, sandboxKeys: f.view && f.view.sandbox ? Object.keys(f.view.sandbox.entries).length : 0 })), values, lists, effective, notes, derived: derivedFromPermissions(settings) };
+  return { present: files.some((f) => f.view && f.view.sandbox), files: settings.files.map((f) => ({ scope: f.scope, label: f.label, display: f.display, path: f.path, rank: f.rank, exists: f.exists, ignored: f.ignored, sandboxKeys: f.view && f.view.sandbox ? Object.keys(f.view.sandbox.entries).length : 0 })), values, lists, effective, notes, derived: derivedFromPermissions(settings) };
 }
 
 /** permissions.blockReadsOutsideWorkingDirectories: true when any file that applies sets true (a false is the same as unset). */

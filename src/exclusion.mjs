@@ -407,12 +407,22 @@ export function deadEntryReason(raw) {
   const entry = typeof raw === "string" ? raw : String(raw);
   if (entry.trim() === "") return { code: "empty", text: "an empty entry matches nothing", sample: "" };
   const e = parseContent(entry);
-  const sample = e.type === "exact" ? entry : e.type === "prefix" ? `${e.prefix} x` : entry.replace(/\\\*/g, "\u0001").replace(/\*+/g, "x").replace(/\u0001/g, "*").replace(/^ +/, "");
-  if (e.type === "exact" && entry !== entry.trim()) return { code: "no-entry", text: "an exact entry with a space at its start or end never equals a call (Claude Code trims the call)", sample };
-  const r = analyzeCall(sample, [{ raw: entry, parsed: e }]);
-  if (r.excluded) return null;
-  if (r.callReasons.length) return { ...r.callReasons[0], sample };
-  const p = r.parts.find((x) => !x.covered);
-  if (p && p.reasons.length) return { ...p.reasons[0], sample };
-  return null;
+  if (e.type === "exact" && entry !== entry.trim()) return { code: "no-entry", text: "an exact entry with a space at its start or end never equals a call (Claude Code trims the call)", sample: entry };
+  // an instance of the entry: every * becomes x (a \* stays a star)
+  const filled = e.type === "exact" ? entry : e.type === "prefix" ? `${e.prefix} x` : entry.replace(/\\\*/g, "\u0001").replace(/\*+/g, "x").replace(/\u0001/g, "*").replace(/^ +/, "");
+  // a wrapper entry such as `timeout *` is matched against calls like `timeout 5 docker ps`: also try it with a duration
+  const samples = [filled];
+  if (/^timeout /.test(filled) && !/^timeout (?:-\S+ )*\d/.test(filled)) samples.push(filled.replace(/^timeout /, "timeout 5 "));
+  let worst = null;
+  for (const sample of samples) {
+    const r = analyzeCall(sample, [{ raw: entry, parsed: e }]);
+    if (r.excluded) return null;
+    if (worst) continue;
+    if (r.callReasons.length) worst = { ...r.callReasons[0], sample };
+    else {
+      const p = r.parts.find((x) => !x.covered);
+      if (p && p.reasons.length) worst = { ...p.reasons[0], sample };
+    }
+  }
+  return worst;
 }

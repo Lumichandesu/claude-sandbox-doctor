@@ -211,10 +211,15 @@ export function lintSettings(settings, { host, merged } = {}) {
   const val = (k) => (m.values[k] && m.values[k].winner ? m.values[k] : null);
   const aa = val("autoAllowBashIfSandboxed");
   if (aa && !eff.enabled) add({ id: "auto-allow-without-sandbox", severity: "warning", scope: aa.winner.source.scope, file: aa.winner.source.path, display: aa.winner.source.display, line: aa.winner.source.line, keyPath: "sandbox.autoAllowBashIfSandboxed", effect: "none", message: `autoAllowBashIfSandboxed is ${JSON.stringify(aa.winner.value)}, but ${!eff.enabledInSettings ? "sandbox.enabled is not true in any file that applies" : "managed enabledPlatforms leaves this system out"}: no command is sandboxed, so it approves nothing.`, fix: "Set sandbox.enabled to true, or remove the key.", basis: "docs" });
-  else if (!eff.enabledInSettings && m.present && Object.keys(m.values).concat(Object.keys(m.lists)).some((k) => !["enabled"].includes(k)) && !val("enabled")) {
-    const some = Object.entries(m.values).find(([k]) => k !== "enabled");
-    const any = some ? some[1].winner : null;
-    if (any && !aa) add({ id: "enabled-unset", severity: "note", scope: any.source.scope, file: any.source.path, display: any.source.display, line: any.source.line, keyPath: "sandbox", effect: "none", message: "The sandbox block sets keys, but sandbox.enabled is not true in any file that applies, so no command is sandboxed.", fix: 'Set "enabled": true (or run /sandbox).', basis: "docs" });
+  else if (!m.values.enabled) {
+    // keys are set and no file says whether the sandbox is on: they do nothing until it is
+    for (const f of settings.files) {
+      const sb = f.exists && !f.ignored && f.view && f.view.sandbox;
+      const key = sb ? Object.keys(sb.entries).find((k) => !["filesystem", "network", "credentials"].includes(k)) : null;
+      if (!key) continue;
+      add({ id: "enabled-unset", severity: "note", scope: f.scope, file: f.path, display: f.display, line: sb.entries[key].line, keyPath: `sandbox.${key}`, effect: "none", message: "The sandbox block sets keys, but sandbox.enabled is not set in any file that applies, so no command is sandboxed.", fix: 'Set "enabled": true (or run /sandbox).', basis: "docs" });
+      break;
+    }
   }
   const unsandboxed = m.values.allowUnsandboxedCommands;
   if (unsandboxed && unsandboxed.winner && unsandboxed.winner.value === true && eff.strictBy.length) {
